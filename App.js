@@ -3,23 +3,25 @@
 // npm install @react-navigation/native @react-navigation/stack
 // npx expo install react-native-screens react-native-safe-area-context
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Alert 
+ View, 
+ Text, 
+ TextInput, 
+ TouchableOpacity, 
+ StyleSheet, 
+ Alert,
+ ActivityIndicator
 } from 'react-native';
 import { auth } from './firebase';
 import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile 
+ createUserWithEmailAndPassword, 
+ signInWithEmailAndPassword,
+ signOut,
+ updateProfile,
+ onAuthStateChanged
 } from 'firebase/auth';
 import { createCommunity, generateInviteCode, joinCommunity, getUserCommunities, addMockMembers, getCommunityMembers, getMockMemberName, createGame } from './communityService';
 
@@ -209,7 +211,7 @@ function CommunityListScreen({ navigation }) {
       const userCommunities = await getUserCommunities();
       setCommunities(userCommunities);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load communities');
+      Alert.alert('Error', error.message || 'Failed to load communities');
     }
   };
 
@@ -233,7 +235,6 @@ function CommunityListScreen({ navigation }) {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Logout', onPress: async () => {
           await signOut(auth);
-          navigation.navigate('Login');
         }}
       ]
     );
@@ -481,51 +482,70 @@ function GameListScreen({ navigation }) {
 }
 
 // Main App Component with Navigation
+function AuthGate({ children, onAuthed, onAnon }) {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u || null);
+      setInitializing(false);
+    });
+    return unsub;
+  }, []);
+
+  if (initializing) {
+    return (
+      <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
+        <ActivityIndicator />
+        <Text style={{ marginTop: 8 }}>Loading…</Text>
+      </View>
+    );
+  }
+
+  return user ? onAuthed : onAnon;
+}
+
 export default function App() {
+  // Logged-out stack (Login + Signup)
+  const AuthStack = (
+    <Stack.Navigator 
+      initialRouteName="Login"
+      screenOptions={{
+        headerStyle: { backgroundColor: '#007AFF' },
+        headerTintColor: 'white',
+        headerTitleStyle: { fontWeight: 'bold' }
+      }}
+    >
+      <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Signup" component={SignupScreen} options={{ title: 'Create Account' }} />
+    </Stack.Navigator>
+  );
+
+  // Logged-in stack (your app)
+  const AppStack = (
+    <Stack.Navigator 
+      initialRouteName="Home"
+      screenOptions={{
+        headerStyle: { backgroundColor: '#007AFF' },
+        headerTintColor: 'white',
+        headerTitleStyle: { fontWeight: 'bold' }
+      }}
+    >
+      <Stack.Screen 
+        name="Home" 
+        component={CommunityListScreen}
+        options={{ title: 'TouchBase Communities' }}
+      />
+      <Stack.Screen name="CreateCommunity" component={CreateCommunityScreen} options={{ title: 'Create Community' }} />
+      <Stack.Screen name="JoinCommunity" component={JoinCommunityScreen} options={{ title: 'Join Community' }} />
+      <Stack.Screen name="GameList" component={GameListScreen} options={{ title: 'Start New Game' }} />
+    </Stack.Navigator>
+  );
+
   return (
     <NavigationContainer>
-      <Stack.Navigator 
-        initialRouteName="Login"
-        screenOptions={{
-          headerStyle: { backgroundColor: '#007AFF' },
-          headerTintColor: 'white',
-          headerTitleStyle: { fontWeight: 'bold' }
-        }}
-      >
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen 
-          name="Signup" 
-          component={SignupScreen}
-          options={{ title: 'Create Account' }}
-        />
-        <Stack.Screen 
-          name="Home" 
-          component={CommunityListScreen}
-          options={{ 
-            title: 'TouchBase Communities',
-            headerLeft: null
-          }}
-        />
-        <Stack.Screen 
-          name="CreateCommunity" 
-          component={CreateCommunityScreen}
-          options={{ title: 'Create Community' }}
-        />
-        <Stack.Screen 
-          name="JoinCommunity" 
-          component={JoinCommunityScreen}
-          options={{ title: 'Join Community' }}
-        />
-        <Stack.Screen 
-          name="GameList" 
-          component={GameListScreen}
-          options={{ title: 'Start New Game' }}
-        />
-      </Stack.Navigator>
+      <AuthGate onAuthed={AppStack} onAnon={AuthStack} />
     </NavigationContainer>
   );
 }
