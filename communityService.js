@@ -161,3 +161,63 @@ export const getMockMemberName = (userId) => {
   };
   return names[userId] || userId;
 };
+
+import { serverTimestamp } from 'firebase/firestore';
+
+// Who am I in this game?
+const whoAmI = (game, uid) => (game.player1Id === uid ? 'player1' : 'player2');
+
+// List games where I am player1 or player2 and still active/in-progress
+export const getMyGames = async () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  // Two simple queries (player1 OR player2), then merge
+  const gamesCol = collection(db, 'games');
+
+  const q1 = query(gamesCol, where('player1Id', '==', user.uid));
+  const q2 = query(gamesCol, where('player2Id', '==', user.uid));
+
+  const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+  const list = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() }));
+
+  // Optional filter by status if you want:
+  // return list.filter(g => g.status !== 'completed');
+  return list;
+};
+
+// Submit my guess (which member I think contacted the opponent)
+export const submitMyGuess = async (game) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  const me = whoAmI(game, user.uid);
+  const fieldGuess = me === 'player1' ? 'player1Guess' : 'player2Guess';
+  const fieldTime = me === 'player1' ? 'player1GuessSubmittedAt' : 'player2GuessSubmittedAt';
+
+  // For MVP we’ll just set the guess; UI will pass the selected memberId
+  return async (memberId) => {
+    await updateDoc(doc(db, 'games', game.id), {
+      [fieldGuess]: memberId,
+      [fieldTime]: serverTimestamp(),
+      status: 'active', // keep status simple for now
+    });
+  };
+};
+
+// Reveal my actual most-recent contact (manual pick from member list)
+export const submitMyActualContact = async (game) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  const me = whoAmI(game, user.uid);
+  const fieldActual = me === 'player1' ? 'player1ActualContact' : 'player2ActualContact';
+  const fieldTime = me === 'player1' ? 'player1RevealedAt' : 'player2RevealedAt';
+
+  return async (memberId) => {
+    await updateDoc(doc(db, 'games', game.id), {
+      [fieldActual]: memberId,
+      [fieldTime]: serverTimestamp(),
+    });
+  };
+};

@@ -15,7 +15,6 @@ import {
  Alert,
  ActivityIndicator
 } from 'react-native';
-import { auth } from './firebase';
 import { 
  createUserWithEmailAndPassword, 
  signInWithEmailAndPassword,
@@ -23,7 +22,27 @@ import {
  updateProfile,
  onAuthStateChanged
 } from 'firebase/auth';
-import { createCommunity, generateInviteCode, joinCommunity, getUserCommunities, addMockMembers, getCommunityMembers, getMockMemberName, createGame } from './communityService';
+import { 
+  createCommunity,
+  generateInviteCode,
+  joinCommunity,
+  getUserCommunities,
+  addMockMembers,
+  getCommunityMembers,
+  getMockMemberName,
+  createGame,
+  getMyGames,
+  submitMyGuess,
+  submitMyActualContact,
+ } from './communityService';
+import { 
+  collection,
+  query, 
+  where, 
+  onSnapshot,
+  doc,
+ } from 'firebase/firestore';
+import { auth, db } from './firebase';
 
 // Create the navigation stack
 const Stack = createStackNavigator();
@@ -41,7 +60,6 @@ const handleLogin = async () => {
   
   try {
     await signInWithEmailAndPassword(auth, email, password);
-    navigation.navigate('Home');
   } catch (error) {
     Alert.alert('Login Failed', error.message);
   }
@@ -105,9 +123,7 @@ const handleSignup = async () => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(userCredential.user, { displayName: displayName });
-    Alert.alert('Success', 'Account created! Welcome to TouchBase!', [
-      { text: 'OK', onPress: () => navigation.navigate('Home') }
-    ]);
+    Alert.alert('Success', 'Account created! Welcome to TouchBase!');
   } catch (error) {
     Alert.alert('Signup Failed', error.message);
   }
@@ -198,6 +214,204 @@ function HomeScreen({ navigation }) {
   );
 }
 
+// My Games Screen - shows user's games
+function MyGamesScreen({ navigation }) {
+  const [games, setGames] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  // Set up listeners exactly once for the current user
+  React.useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const col = collection(db, 'games');
+    const q1 = query(col, where('player1Id', '==', uid));
+    const q2 = query(col, where('player2Id', '==', uid));
+
+    const unsub1 = onSnapshot(q1, (snap) => {
+      setGames((prev) => {
+        const rest = prev.filter(g => g._side !== 'p1');
+        const fresh = snap.docs.map(d => ({ id: d.id, ...d.data(), _side: 'p1' }));
+        return [...rest, ...fresh];
+      });
+      setLoading(false);
+    });
+
+    const unsub2 = onSnapshot(q2, (snap) => {
+      setGames((prev) => {
+        const rest = prev.filter(g => g._side !== 'p2');
+        const fresh = snap.docs.map(d => ({ id: d.id, ...d.data(), _side: 'p2' }));
+        return [...rest, ...fresh];
+      });
+      setLoading(false);
+    });
+
+    return () => { unsub1(); unsub2(); };
+  }, []);
+
+  // ❗ Hooks must be called unconditionally (before any early returns)
+  const deduped = React.useMemo(() => {
+    const map = new Map();
+    for (const g of games) map.set(g.id, g);
+    return Array.from(map.values());
+  }, [games]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading games…</Text>
+      </View>
+    );
+  }
+
+  if (deduped.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: '#666', marginBottom: 20 }}>No games yet.</Text>
+        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('GameList')}>
+          <Text style={styles.buttonText}>Start New Game</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>My Games</Text>
+      {deduped.map(g => (
+        <TouchableOpacity
+          key={g.id}
+          style={styles.communityCard}
+          onPress={() => navigation.navigate('Game', { gameId: g.id })}
+        >
+          <Text style={styles.communityName}>
+            Game vs. {g.player1Id === auth.currentUser.uid
+              ? getMockMemberName(g.player2Id)
+              : getMockMemberName(g.player1Id)}
+          </Text>
+          <Text style={styles.memberCount}>Status: {g.status || 'active'}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+// The actual GameScreen to play with other people
+function GameScreen({ route, navigation }) {
+  const { gameId } = route.params;
+  const [game, setGame] = React.useState(null);
+  const [members, setMembers] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'games', gameId), (snap) => {
+      if (snap.exists()) setGame({ id: snap.id, ...snap.data() });
+    });
+    return () => unsub();
+  }, [gameId]);
+
+  // Load members for this game’s community (reuse your existing helper)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (game?.communityId) {
+          const { availableOpponents, community } = await getCommunityMembers(game.communityId);
+          // Include me too so I can select any member when revealing
+          const allMembers = [...community.members];
+          setMembers(allMembers);
+        }
+      } catch (e) {
+        console.log('load members error', e);
+      }
+    })();
+  }, [game?.communityId]);
+
+  if (!game) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading game…</Text>
+      </View>
+    );
+  }
+
+  const me = game.player1Id === auth.currentUser.uid ? 'player1' : 'player2';
+  const myGuess = me === 'player1' ? game.player1Guess : game.player2Guess;
+  const myActual = me === 'player1' ? game.player1ActualContact : game.player2ActualContact;
+
+  const handleGuess = async (memberId) => {
+    try {
+      setBusy(true);
+      const submit = await submitMyGuess(game);
+      await submit(memberId);
+      Alert.alert('Guess submitted', 'Now wait for your opponent or proceed to reveal.');
+    } catch (e) {
+      Alert.alert('Guess error', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReveal = async (memberId) => {
+    try {
+      setBusy(true);
+      const submit = await submitMyActualContact(game);
+      await submit(memberId);
+      Alert.alert('Reveal submitted', 'Waiting for opponent.');
+    } catch (e) {
+      Alert.alert('Reveal error', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Ultra-simple outcome calculator (client-side for MVP)
+  const p1Right = game.player1Guess && game.player2ActualContact && (game.player1Guess === game.player2ActualContact);
+  const p2Right = game.player2Guess && game.player1ActualContact && (game.player2Guess === game.player1ActualContact);
+  let outcome = '—';
+  if (p1Right && p2Right) outcome = 'Both right';
+  else if (p1Right) outcome = 'Player 1 right';
+  else if (p2Right) outcome = 'Player 2 right';
+  else if (game.player1ActualContact && game.player2ActualContact) outcome = 'Both wrong';
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Game</Text>
+      <Text style={styles.subtitle}>
+        You are {me === 'player1' ? 'Player 1' : 'Player 2'}
+      </Text>
+
+      <View style={styles.communityCard}>
+        <Text style={styles.communityName}>Your guess: {myGuess ? getMockMemberName(myGuess) : '—'}</Text>
+        <Text style={styles.memberCount}>Your actual: {myActual ? getMockMemberName(myActual) : '—'}</Text>
+      </View>
+
+      <Text style={{ marginVertical: 10, fontWeight: '600' }}>Make a guess (who contacted your opponent)?</Text>
+      {members
+        .filter(m => m !== auth.currentUser.uid) // guess should be about someone contacting opponent
+        .map(m => (
+          <TouchableOpacity key={m} style={styles.opponentCard} onPress={() => handleGuess(m)} disabled={busy}>
+            <Text style={styles.opponentName}>{getMockMemberName(m)}</Text>
+          </TouchableOpacity>
+        ))}
+
+      <Text style={{ marginVertical: 10, fontWeight: '600' }}>Reveal your actual most recent contact:</Text>
+      {members.map(m => (
+        <TouchableOpacity key={m} style={styles.smallButton} onPress={() => handleReveal(m)} disabled={busy}>
+          <Text style={styles.smallButtonText}>{getMockMemberName(m)}</Text>
+        </TouchableOpacity>
+      ))}
+
+      <View style={{ marginTop: 20 }}>
+        <Text>Outcome (live): {outcome}</Text>
+        <Text style={{ marginTop: 6 }}>P1 guessed: {game.player1Guess ? getMockMemberName(game.player1Guess) : '—'}</Text>
+        <Text>P2 guessed: {game.player2Guess ? getMockMemberName(game.player2Guess) : '—'}</Text>
+        <Text>P1 actual: {game.player1ActualContact ? getMockMemberName(game.player1ActualContact) : '—'}</Text>
+        <Text>P2 actual: {game.player2ActualContact ? getMockMemberName(game.player2ActualContact) : '—'}</Text>
+      </View>
+    </View>
+  );
+}
+
 // Community List Screen - shows user's communities
 function CommunityListScreen({ navigation }) {
   const [communities, setCommunities] = useState([]);
@@ -273,6 +487,10 @@ function CommunityListScreen({ navigation }) {
         <Text style={styles.buttonText}>Start New Game</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('MyGames')}>
+        <Text style={styles.buttonText}>My Games</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToCreateCommunity}>
         <Text style={styles.buttonText}>Create Community</Text>
       </TouchableOpacity>
@@ -283,6 +501,20 @@ function CommunityListScreen({ navigation }) {
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.buttonText}>Logout</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: '#8E8E93' }]}
+        onPress={async () => {
+          try {
+            const snap = await getDocs(collection(db, 'games'));
+            Alert.alert('Games debug', `Total games in DB: ${snap.size}`);
+          } catch (e) {
+            Alert.alert('Games debug error', e.message);
+          }
+        }}
+      >
+        <Text style={styles.buttonText}>Debug: Count Games</Text>
       </TouchableOpacity>
     </View>
   );
@@ -429,7 +661,7 @@ function GameListScreen({ navigation }) {
     try {
       const game = await createGame(communityId, opponentId);
       Alert.alert('Game Created!', 'Ready to start guessing', [
-        { text: 'OK', onPress: () => navigation.navigate('Home') }
+        { text: 'OK', onPress: () => navigation.navigate('Game', { gameId: game.id }) }
       ]);
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -532,14 +764,16 @@ export default function App() {
         headerTitleStyle: { fontWeight: 'bold' }
       }}
     >
-      <Stack.Screen 
-        name="Home" 
-        component={CommunityListScreen}
-        options={{ title: 'TouchBase Communities' }}
-      />
+    <Stack.Screen
+      name="Home"
+      component={CommunityListScreen}
+      options={{ title: 'TouchBase Communities', headerBackVisible: false }}
+    />
       <Stack.Screen name="CreateCommunity" component={CreateCommunityScreen} options={{ title: 'Create Community' }} />
       <Stack.Screen name="JoinCommunity" component={JoinCommunityScreen} options={{ title: 'Join Community' }} />
       <Stack.Screen name="GameList" component={GameListScreen} options={{ title: 'Start New Game' }} />
+      <Stack.Screen name="MyGames" component={MyGamesScreen} options={{ title: 'My Games' }} />
+      <Stack.Screen name="Game" component={GameScreen} options={{ title: 'Game' }} />
     </Stack.Navigator>
   );
 
