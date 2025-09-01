@@ -1,7 +1,4 @@
-// First, we need to install navigation packages
-// Run this in your terminal:
-// npm install @react-navigation/native @react-navigation/stack
-// npx expo install react-native-screens react-native-safe-area-context
+// This is my app.js file which holds basically the whole TouchBase app: game screens and other components and logic
 
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -34,6 +31,8 @@ import {
   getMyGames,
   submitMyGuess,
   submitMyActualContact,
+  autoFillMockPlayer,
+  isGameBot,
  } from './communityService';
 import { 
   collection,
@@ -41,6 +40,7 @@ import {
   where, 
   onSnapshot,
   doc,
+  getDocs, 
  } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
@@ -310,42 +310,49 @@ function GameScreen({ route, navigation }) {
     return () => unsub();
   }, [gameId]);
 
-  // Load members for this game’s community (reuse your existing helper)
+  // Load members and auto-fill for mock players
   React.useEffect(() => {
     (async () => {
       try {
         if (game?.communityId) {
-          const { availableOpponents, community } = await getCommunityMembers(game.communityId);
-          // Include me too so I can select any member when revealing
-          const allMembers = [...community.members];
+          const { community } = await getCommunityMembers(game.communityId);
+          const allMembers = Array.isArray(community?.members) ? [...community.members] : [];
           setMembers(allMembers);
+
+          // Auto-fill mock player moves for testing
+          if ((game?.player2Id?.startsWith?.('mock_user_')) || (game?.player1Id?.startsWith?.('mock_user_'))) {
+            await autoFillMockPlayer(gameId);
+          }
         }
       } catch (e) {
         console.log('load members error', e);
       }
     })();
-  }, [game?.communityId]);
+  }, [game?.communityId, gameId]);
 
   if (!game) {
     return (
       <View style={styles.container}>
-        <Text>Loading game…</Text>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{ marginTop: 10 }}>Loading game…</Text>
       </View>
     );
   }
 
   const me = game.player1Id === auth.currentUser.uid ? 'player1' : 'player2';
+  const opponent = me === 'player1' ? 'player2' : 'player1';
   const myGuess = me === 'player1' ? game.player1Guess : game.player2Guess;
   const myActual = me === 'player1' ? game.player1ActualContact : game.player2ActualContact;
+  const opponentGuess = opponent === 'player1' ? game.player1Guess : game.player2Guess;
+  const opponentActual = opponent === 'player1' ? game.player1ActualContact : game.player2ActualContact;
 
   const handleGuess = async (memberId) => {
     try {
       setBusy(true);
-      const submit = await submitMyGuess(game);
-      await submit(memberId);
-      Alert.alert('Guess submitted', 'Now wait for your opponent or proceed to reveal.');
+      await submitMyGuess(gameId, memberId);
+      Alert.alert('Guess Submitted!', 'Now reveal who actually contacted you.');
     } catch (e) {
-      Alert.alert('Guess error', e.message);
+      Alert.alert('Error', e.message);
     } finally {
       setBusy(false);
     }
@@ -354,60 +361,137 @@ function GameScreen({ route, navigation }) {
   const handleReveal = async (memberId) => {
     try {
       setBusy(true);
-      const submit = await submitMyActualContact(game);
-      await submit(memberId);
-      Alert.alert('Reveal submitted', 'Waiting for opponent.');
+      await submitMyActualContact(gameId, memberId);
+      Alert.alert('Contact Revealed!', 'Waiting for game to complete...');
     } catch (e) {
-      Alert.alert('Reveal error', e.message);
+      Alert.alert('Error', e.message);
     } finally {
       setBusy(false);
     }
   };
 
-  // Ultra-simple outcome calculator (client-side for MVP)
-  const p1Right = game.player1Guess && game.player2ActualContact && (game.player1Guess === game.player2ActualContact);
-  const p2Right = game.player2Guess && game.player1ActualContact && (game.player2Guess === game.player1ActualContact);
-  let outcome = '—';
-  if (p1Right && p2Right) outcome = 'Both right';
-  else if (p1Right) outcome = 'Player 1 right';
-  else if (p2Right) outcome = 'Player 2 right';
-  else if (game.player1ActualContact && game.player2ActualContact) outcome = 'Both wrong';
+  // Completed game results
+  if (game.status === 'completed') {
+    const didIWin = game.winner === me || game.winner === 'tie';
+    const bothWrong = game.outcome === 'both_wrong' || game.winner === 'none';
 
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Game Complete!</Text>
+
+        <View style={styles.communityCard}>
+          <Text style={styles.communityName}>
+            {didIWin ? '🎉 ' : ''}
+            {game.winner === 'tie'
+              ? 'Both Correct!'
+              : bothWrong
+                ? 'Both Wrong!'
+                : didIWin
+                  ? 'You Won!'
+                  : 'You Lost'}
+          </Text>
+
+          <Text style={styles.memberCount}>Your guess: {myGuess ? getMockMemberName(myGuess) : '—'}</Text>
+          <Text style={styles.memberCount}>They actually contacted: {opponentActual ? getMockMemberName(opponentActual) : '—'}</Text>
+
+          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ddd' }}>
+            <Text style={styles.memberCount}>Their guess: {opponentGuess ? getMockMemberName(opponentGuess) : '—'}</Text>
+            <Text style={styles.memberCount}>You actually contacted: {myActual ? getMockMemberName(myActual) : '—'}</Text>
+          </View>
+        </View>
+
+        {Array.isArray(game.consequences) && game.consequences.length > 0 && (
+          <View style={styles.communityCard}>
+            <Text style={styles.communityName}>Consequences:</Text>
+            {game.consequences.map((c, i) => (
+              <Text key={i} style={styles.memberCount}>• {c?.description || '—'}</Text>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('MyGames')}>
+          <Text style={styles.buttonText}>Back to Games</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Mid-game flags
+  const bothGuessed = Boolean(game.player1Guess && game.player2Guess);
+  const bothRevealed = Boolean(game.player1ActualContact && game.player2ActualContact);
+
+  const showGuessPhase = !myGuess;
+  const showRevealPhase = myGuess && !myActual;
+  const waitingForOpponent = myGuess && myActual && !game.outcome;
+
+  const statusBanner = (game.status === 'guessing_complete' && !bothRevealed) ? (
+    <View style={[styles.communityCard, { borderLeftWidth: 4, borderLeftColor: '#007AFF' }]}>
+      <Text style={styles.memberCount}>Both guesses are in — time to reveal your actual contact.</Text>
+    </View>
+  ) : null;
+
+  // Waiting screen
+  if (waitingForOpponent) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Waiting for Opponent</Text>
+        <ActivityIndicator size="large" color="#007AFF" style={{ marginVertical: 20 }} />
+        <Text style={styles.subtitle}>Your moves are submitted. Waiting for opponent...</Text>
+
+        <View style={styles.communityCard}>
+          <Text style={styles.communityName}>Your guess: {getMockMemberName(myGuess)}</Text>
+          <Text style={styles.memberCount}>Your actual contact: {getMockMemberName(myActual)}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Active game
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Game</Text>
+      <Text style={styles.title}>{showGuessPhase ? 'Make Your Guess' : 'Reveal Your Contact'}</Text>
+
+      {statusBanner}
+
       <Text style={styles.subtitle}>
-        You are {me === 'player1' ? 'Player 1' : 'Player 2'}
+        {showGuessPhase
+          ? 'Who do you think contacted your opponent most recently?'
+          : 'Who from this community contacted YOU most recently?'}
       </Text>
 
-      <View style={styles.communityCard}>
-        <Text style={styles.communityName}>Your guess: {myGuess ? getMockMemberName(myGuess) : '—'}</Text>
-        <Text style={styles.memberCount}>Your actual: {myActual ? getMockMemberName(myActual) : '—'}</Text>
-      </View>
+      {showGuessPhase ? (
+        members
+          .filter(m => m !== auth.currentUser.uid && m !== game.player2Id && m !== game.player1Id)
+          .map(m => (
+            <TouchableOpacity
+              key={m}
+              style={styles.opponentCard}
+              onPress={() => handleGuess(m)}
+              disabled={busy}
+            >
+              <Text style={styles.opponentName}>{getMockMemberName(m)}</Text>
+            </TouchableOpacity>
+          ))
+      ) : (
+        <>
+          <View style={styles.communityCard}>
+            <Text style={styles.memberCount}>Your guess was: {getMockMemberName(myGuess)}</Text>
+          </View>
 
-      <Text style={{ marginVertical: 10, fontWeight: '600' }}>Make a guess (who contacted your opponent)?</Text>
-      {members
-        .filter(m => m !== auth.currentUser.uid) // guess should be about someone contacting opponent
-        .map(m => (
-          <TouchableOpacity key={m} style={styles.opponentCard} onPress={() => handleGuess(m)} disabled={busy}>
-            <Text style={styles.opponentName}>{getMockMemberName(m)}</Text>
-          </TouchableOpacity>
-        ))}
-
-      <Text style={{ marginVertical: 10, fontWeight: '600' }}>Reveal your actual most recent contact:</Text>
-      {members.map(m => (
-        <TouchableOpacity key={m} style={styles.smallButton} onPress={() => handleReveal(m)} disabled={busy}>
-          <Text style={styles.smallButtonText}>{getMockMemberName(m)}</Text>
-        </TouchableOpacity>
-      ))}
-
-      <View style={{ marginTop: 20 }}>
-        <Text>Outcome (live): {outcome}</Text>
-        <Text style={{ marginTop: 6 }}>P1 guessed: {game.player1Guess ? getMockMemberName(game.player1Guess) : '—'}</Text>
-        <Text>P2 guessed: {game.player2Guess ? getMockMemberName(game.player2Guess) : '—'}</Text>
-        <Text>P1 actual: {game.player1ActualContact ? getMockMemberName(game.player1ActualContact) : '—'}</Text>
-        <Text>P2 actual: {game.player2ActualContact ? getMockMemberName(game.player2ActualContact) : '—'}</Text>
-      </View>
+          {members
+            .filter(m => m !== auth.currentUser.uid)
+            .map(m => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.opponentCard, { backgroundColor: '#34C759' }]}
+                onPress={() => handleReveal(m)}
+                disabled={busy}
+              >
+                <Text style={styles.opponentName}>{getMockMemberName(m)}</Text>
+              </TouchableOpacity>
+            ))}
+        </>
+      )}
     </View>
   );
 }
