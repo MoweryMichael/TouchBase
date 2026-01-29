@@ -1,14 +1,16 @@
 // This is my communityService.js file which holds a lot of the components and const that are called from the app.js file
 
 import { db, auth } from './firebase';
-import { 
-  collection, 
-  addDoc, 
-  doc, 
-  updateDoc, 
-  arrayUnion, 
-  query, 
-  where, 
+import {
+  collection,
+  addDoc,
+  doc,
+  setDoc,
+  updateDoc,
+  writeBatch,
+  arrayUnion,
+  query,
+  where,
   getDocs,
   getDoc,
   serverTimestamp
@@ -317,15 +319,77 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
       });
     }
     
-    // Update game with outcome
-    await updateDoc(gameRef, {
+// Persist outcome + consequences atomically
+    const batch = writeBatch(db);
+
+    batch.update(gameRef, {
       outcome,
       winner,
       consequences,
       status: 'completed',
-      gameCompletedAt: serverTimestamp()
+      gameCompletedAt: serverTimestamp(),
+      consequencesPersisted: true
     });
-    
+
+    const communityId = game.communityId || null;
+
+    for (const c of consequences) {
+      if (c.type === 'owed') {
+        const fromPlayer = c.fromPlayer;
+        const toPlayer = c.toPlayer;
+        const id = `${gameId}_${fromPlayer}_${toPlayer}_owed`;
+        const cRef = doc(db, 'consequences', id);
+        batch.set(cRef, {
+          id,
+          fromGameId: gameId,
+          communityId,
+          playerId: fromPlayer,
+          targetId: toPlayer,
+          type: 'owed',
+          description: c.description || 'Reconnect as agreed',
+          completed: false,
+          completedAt: null,
+          proofText: null,
+          createdAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      if (c.type === 'joint') {
+        const p1 = c.player1Id;
+        const p2 = c.player2Id;
+        const desc = c.description || 'Do a joint positive gesture together';
+
+        batch.set(doc(db, 'consequences', `${gameId}_${p1}_joint`), {
+          id: `${gameId}_${p1}_joint`,
+          fromGameId: gameId,
+          communityId,
+          playerId: p1,
+          targetId: p2,
+          type: 'joint',
+          description: desc,
+          completed: false,
+          completedAt: null,
+          proofText: null,
+          createdAt: serverTimestamp()
+        }, { merge: true });
+
+        batch.set(doc(db, 'consequences', `${gameId}_${p2}_joint`), {
+          id: `${gameId}_${p2}_joint`,
+          fromGameId: gameId,
+          communityId,
+          playerId: p2,
+          targetId: p1,
+          type: 'joint',
+          description: desc,
+          completed: false,
+          completedAt: null,
+          proofText: null,
+          createdAt: serverTimestamp()
+        }, { merge: true });
+      }
+    }
+
+    await batch.commit();
     return { outcome, winner, consequences };
   }
 };
@@ -399,4 +463,63 @@ export const listActiveGamesForUser = async () => {
 export const listGameHistoryForUser = async () => {
   const games = await getMyGames();
   return games.filter(g => g.status === 'completed');
+};
+
+// ─── Consequences ───────────────────────────────────────────────────────────
+
+export const getConsequencesOwedByMe = async (includeCompleted = false) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  const q = query(collection(db, 'consequences'), where('playerId', '==', user.uid));
+  const snap = await getDocs(q);
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const filtered = includeCompleted ? items : items.filter(x => !x.completed);
+
+  filtered.sort((a, b) => {
+    const at = a.createdAt?.toMillis?.() || 0;
+    const bt = b.createdAt?.toMillis?.() || 0;
+    return bt - at;
+  });
+
+  return filtered;
+};
+
+export const getConsequencesOwedToMe = async (includeCompleted = false) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  const q = query(collection(db, 'consequences'), where('targetId', '==', user.uid));
+  const snap = await getDocs(q);
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const filtered = includeCompleted ? items : items.filter(x => !x.completed);
+
+  filtered.sort((a, b) => {
+    const at = a.createdAt?.toMillis?.() || 0;
+    const bt = b.createdAt?.toMillis?.() || 0;
+    return bt - at;
+  });
+
+  return filtered;
+};
+
+export const completeConsequence = async (consequenceId, proofText = null) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  const ref = doc(db, 'consequences', consequenceId);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) throw new Error('Consequence not found');
+
+  const c = snap.data();
+  if (c.playerId !== user.uid) throw new Error('You can only complete your own consequences');
+
+  await updateDoc(ref, {
+    completed: true,
+    completedAt: serverTimestamp(),
+    proofText: proofText || null
+  });
+
+  return true;
 };

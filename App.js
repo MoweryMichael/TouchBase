@@ -10,7 +10,8 @@ import {
  TouchableOpacity, 
  StyleSheet, 
  Alert,
- ActivityIndicator
+ ActivityIndicator,
+ ScrollView
 } from 'react-native';
 import { 
  createUserWithEmailAndPassword, 
@@ -33,6 +34,9 @@ import {
   submitMyActualContact,
   autoFillMockPlayer,
   isGameBot,
+  getConsequencesOwedByMe,
+  getConsequencesOwedToMe,
+  completeConsequence,
  } from './communityService';
 import { 
   collection,
@@ -276,7 +280,7 @@ function MyGamesScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
       <Text style={styles.title}>My Games</Text>
       {deduped.map(g => (
         <TouchableOpacity
@@ -292,7 +296,96 @@ function MyGamesScreen({ navigation }) {
           <Text style={styles.memberCount}>Status: {g.status || 'active'}</Text>
         </TouchableOpacity>
       ))}
-    </View>
+    </ScrollView>
+  );
+}
+
+// My ConsequencesScreen - shows user's consequences
+function ConsequencesScreen() {
+  const [owedByMe, setOwedByMe] = useState([]);
+  const [owedToMe, setOwedToMe] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      setBusy(true);
+      const [a, b] = await Promise.all([
+        getConsequencesOwedByMe(false),
+        getConsequencesOwedToMe(false),
+      ]);
+      setOwedByMe(a);
+      setOwedToMe(b);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to load consequences');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleComplete = async (id) => {
+    try {
+      setBusy(true);
+      await completeConsequence(id);
+      await load();
+      Alert.alert('Done', 'Marked complete.');
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to complete');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>My Consequences</Text>
+
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: '#8E8E93', marginBottom: 12 }]}
+        onPress={load}
+        disabled={busy}
+      >
+        <Text style={styles.buttonText}>{busy ? 'Refreshing…' : 'Refresh'}</Text>
+      </TouchableOpacity>
+
+      <View style={styles.communityCard}>
+        <Text style={styles.communityName}>I Owe</Text>
+        {owedByMe.length === 0 ? (
+          <Text style={{ color: '#666' }}>Nothing owed right now.</Text>
+        ) : (
+          owedByMe.map((c) => (
+            <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' }}>
+              <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
+              <Text style={{ color: '#666', marginTop: 4 }}>To: {getMockMemberName(c.targetId)}</Text>
+              <TouchableOpacity
+                style={[styles.smallButton, { marginTop: 8 }]}
+                onPress={() => handleComplete(c.id)}
+                disabled={busy}
+              >
+                <Text style={styles.smallButtonText}>Mark Complete</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+      </View>
+
+      <View style={styles.communityCard}>
+        <Text style={styles.communityName}>Owed To Me</Text>
+        {owedToMe.length === 0 ? (
+          <Text style={{ color: '#666' }}>No one owes you anything right now.</Text>
+        ) : (
+          owedToMe.map((c) => (
+            <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' }}>
+              <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
+              <Text style={{ color: '#666', marginTop: 4 }}>From: {getMockMemberName(c.playerId)}</Text>
+            </View>
+          ))
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -549,7 +642,7 @@ function CommunityListScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
       <Text style={styles.title}>Your Communities</Text>
       <Text style={styles.subtitle}>Manage communities and start games</Text>
 
@@ -575,6 +668,13 @@ function CommunityListScreen({ navigation }) {
         <Text style={styles.buttonText}>My Games</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: '#FF9500' }]}
+        onPress={() => navigation.navigate('Consequences')}
+      >
+        <Text style={styles.buttonText}>My Consequences</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToCreateCommunity}>
         <Text style={styles.buttonText}>Create Community</Text>
       </TouchableOpacity>
@@ -586,21 +686,7 @@ function CommunityListScreen({ navigation }) {
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.buttonText}>Logout</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: '#8E8E93' }]}
-        onPress={async () => {
-          try {
-            const snap = await getDocs(collection(db, 'games'));
-            Alert.alert('Games debug', `Total games in DB: ${snap.size}`);
-          } catch (e) {
-            Alert.alert('Games debug error', e.message);
-          }
-        }}
-      >
-        <Text style={styles.buttonText}>Debug: Count Games</Text>
-      </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -857,6 +943,7 @@ export default function App() {
       <Stack.Screen name="JoinCommunity" component={JoinCommunityScreen} options={{ title: 'Join Community' }} />
       <Stack.Screen name="GameList" component={GameListScreen} options={{ title: 'Start New Game' }} />
       <Stack.Screen name="MyGames" component={MyGamesScreen} options={{ title: 'My Games' }} />
+      <Stack.Screen name="Consequences" component={ConsequencesScreen} options={{ title: 'Consequences' }} />
       <Stack.Screen name="Game" component={GameScreen} options={{ title: 'Game' }} />
     </Stack.Navigator>
   );
@@ -1008,4 +1095,11 @@ smallButtonText: {
   fontSize: 12,
   fontWeight: '600',
 },
+scrollContainer: {
+    flexGrow: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 40,
+  },
 });
