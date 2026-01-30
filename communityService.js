@@ -1,4 +1,5 @@
-// This is my communityService.js file which holds a lot of the components and const that are called from the app.js file
+// communityService.js - TouchBase backend services
+// Updated with user profile and display name support
 
 import { db, auth } from './firebase';
 import {
@@ -16,17 +17,165 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// USER PROFILE & DISPLAY NAME SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// In-memory cache for display names (survives across component renders)
+const displayNameCache = new Map();
+
+// Mock user names
+const MOCK_NAMES = {
+  'mock_user_1_sarah': 'Sarah Chen',
+  'mock_user_2_mike': 'Mike Rodriguez',
+  'mock_user_3_jessica': 'Jessica Kim',
+  'mock_user_4_alex': 'Alex Thompson'
+};
+
+// Create or update user profile in Firestore
+// Call this after signup and optionally on login
+export const saveUserProfile = async (userId, displayName) => {
+  if (!userId || !displayName) return;
+  
+  const userRef = doc(db, 'users', userId);
+  await setDoc(userRef, {
+    displayName,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+  
+  // Update cache immediately
+  displayNameCache.set(userId, displayName);
+};
+
+// Fetch a single user's display name (async, with caching)
+export const fetchUserDisplayName = async (userId) => {
+  if (!userId) return null;
+  
+  // Check mock users first
+  if (MOCK_NAMES[userId]) {
+    displayNameCache.set(userId, MOCK_NAMES[userId]);
+    return MOCK_NAMES[userId];
+  }
+  
+  // Check cache
+  if (displayNameCache.has(userId)) {
+    return displayNameCache.get(userId);
+  }
+  
+  // Fetch from Firestore
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const name = userSnap.data().displayName || userId;
+      displayNameCache.set(userId, name);
+      return name;
+    }
+  } catch (e) {
+    console.log('fetchUserDisplayName error:', e.message);
+  }
+  
+  // Fallback to userId
+  displayNameCache.set(userId, userId);
+  return userId;
+};
+
+// Fetch multiple users' display names at once (more efficient)
+export const fetchUserDisplayNames = async (userIds) => {
+  if (!userIds || userIds.length === 0) return;
+  
+  const uncached = userIds.filter(id => {
+    // Skip if already cached or is a mock user
+    if (displayNameCache.has(id)) return false;
+    if (MOCK_NAMES[id]) {
+      displayNameCache.set(id, MOCK_NAMES[id]);
+      return false;
+    }
+    return true;
+  });
+  
+  if (uncached.length === 0) return;
+  
+  // Fetch all uncached users
+  // Note: Firestore 'in' queries limited to 30 items, so chunk if needed
+  const chunks = [];
+  for (let i = 0; i < uncached.length; i += 30) {
+    chunks.push(uncached.slice(i, i + 30));
+  }
+  
+  for (const chunk of chunks) {
+    try {
+      const q = query(
+        collection(db, 'users'),
+        where('__name__', 'in', chunk)
+      );
+      const snap = await getDocs(q);
+      
+      snap.docs.forEach(docSnap => {
+        const name = docSnap.data().displayName || docSnap.id;
+        displayNameCache.set(docSnap.id, name);
+      });
+      
+      // For any users not found in Firestore, cache their ID as fallback
+      chunk.forEach(id => {
+        if (!displayNameCache.has(id)) {
+          displayNameCache.set(id, id);
+        }
+      });
+    } catch (e) {
+      console.log('fetchUserDisplayNames error:', e.message);
+      // Fallback: cache IDs for failed fetches
+      chunk.forEach(id => {
+        if (!displayNameCache.has(id)) {
+          displayNameCache.set(id, id);
+        }
+      });
+    }
+  }
+};
+
+// Get display name synchronously from cache
+// Call fetchUserDisplayNames first to populate cache
+export const getUserDisplayName = (userId) => {
+  if (!userId) return 'Unknown';
+  
+  // Check mock users
+  if (MOCK_NAMES[userId]) return MOCK_NAMES[userId];
+  
+  // Check cache
+  if (displayNameCache.has(userId)) {
+    return displayNameCache.get(userId);
+  }
+  
+  // Not in cache yet - return shortened ID as placeholder
+  return userId.slice(0, 8) + '...';
+};
+
+// Clear cache (call on logout)
+export const clearDisplayNameCache = () => {
+  displayNameCache.clear();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MOCK USER HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // Simple helper to detect mock "bot" users
 const isMockUser = (userId = '') => userId.startsWith('mock_user_');
+
 export const isGameBot = (game) => {
   const flag = game?.isBotOpponent ?? game?.botOpponent;
   if (typeof flag === 'boolean') return flag;
-  // Fallback to checking IDs (covers old docs without the flag)
   return (game?.player1Id?.startsWith?.('mock_user_') ||
           game?.player2Id?.startsWith?.('mock_user_')) || false;
 };
 
-// Generate unique 7-character invite code (React Native compatible)
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMMUNITY MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Generate unique 7-character invite code
 export const generateInviteCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
@@ -87,64 +236,7 @@ export const getUserCommunities = async () => {
   }));
 };
 
-// Create new game between two players
-export const createGame = async (communityId, opponentId) => {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Must be logged in');
-
-  console.log('createGame: Starting...');
-  console.log('createGame: user.uid =', user.uid);
-  console.log('createGame: communityId =', communityId);
-  console.log('createGame: opponentId =', opponentId);
-
-  const botOpponent = isMockUser(opponentId);
-  console.log('createGame: botOpponent =', botOpponent);
-
-  const game = {
-    communityId,
-    player1Id: user.uid,
-    player2Id: opponentId,
-    status: 'active',
-    createdAt: serverTimestamp(),
-    player1Guess: null,
-    player2Guess: null,
-    player1GuessSubmittedAt: null,
-    player2GuessSubmittedAt: null,
-    player1ActualContact: null,
-    player2ActualContact: null,
-    player1RevealedAt: null,
-    player2RevealedAt: null,
-    winner: null,
-    outcome: null,
-    gameCompletedAt: null,
-    consequences: [],
-    consequencesPersisted: null,  // ADD THIS LINE - it was missing
-    isBotOpponent: botOpponent,
-    botOpponent: botOpponent,
-  };
-
-  console.log('createGame: About to addDoc...');
-  
-  try {
-    const docRef = await addDoc(collection(db, 'games'), game);
-    console.log('createGame: Game doc created:', docRef.id);
-    
-    if (botOpponent) {
-      console.log('createGame: About to autoFillMockPlayer...');
-      await autoFillMockPlayer(docRef.id);
-      console.log('createGame: autoFillMockPlayer complete');
-    }
-    
-    return { id: docRef.id, ...game };
-  } catch (e) {
-    console.log('createGame: FAILED at addDoc or autoFill');
-    console.log('createGame error:', e.code, e.message);
-    throw e;
-  }
-};
-
-
-// Get community members (updated version)
+// Get community members
 export const getCommunityMembers = async (communityId) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Must be logged in');
@@ -165,7 +257,7 @@ export const getCommunityMembers = async (communityId) => {
   };
 };
 
-// Add mock members to community for testing (temporary)
+// Add mock members to community for testing
 export const addMockMembers = async (communityId) => {
   const mockMembers = [
     'mock_user_1_sarah',
@@ -182,36 +274,60 @@ export const addMockMembers = async (communityId) => {
   return mockMembers;
 };
 
-// Get mock member display names
-export const getMockMemberName = (userId) => {
-  const names = {
-    'mock_user_1_sarah': 'Sarah Chen',
-    'mock_user_2_mike': 'Mike Rodriguez', 
-    'mock_user_3_jessica': 'Jessica Kim',
-    'mock_user_4_alex': 'Alex Thompson'
-  };
-  return names[userId] || userId;
-};
+// ═══════════════════════════════════════════════════════════════════════════════
+// GAME MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // Who am I in this game?
 const whoAmI = (game, uid) => (game.player1Id === uid ? 'player1' : 'player2');
 
-// List games where I am player1 or player2 and still active/in-progress
+// Create new game between two players
+export const createGame = async (communityId, opponentId) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be logged in');
+
+  const botOpponent = isMockUser(opponentId);
+
+  const game = {
+    communityId,
+    player1Id: user.uid,
+    player2Id: opponentId,
+    status: 'active',
+    createdAt: serverTimestamp(),
+    player1Guess: null,
+    player2Guess: null,
+    player1GuessSubmittedAt: null,
+    player2GuessSubmittedAt: null,
+    player1ActualContact: null,
+    player2ActualContact: null,
+    player1RevealedAt: null,
+    player2RevealedAt: null,
+    winner: null,
+    outcome: null,
+    gameCompletedAt: null,
+    consequences: [],
+    consequencesPersisted: null,
+    isBotOpponent: botOpponent,
+    botOpponent: botOpponent,
+  };
+
+  const docRef = await addDoc(collection(db, 'games'), game);
+  if (botOpponent) await autoFillMockPlayer(docRef.id);
+  return { id: docRef.id, ...game };
+};
+
+// List games where I am player1 or player2
 export const getMyGames = async () => {
   const user = auth.currentUser;
   if (!user) throw new Error('Must be logged in');
 
-  // Two simple queries (player1 OR player2), then merge
   const gamesCol = collection(db, 'games');
-
   const q1 = query(gamesCol, where('player1Id', '==', user.uid));
   const q2 = query(gamesCol, where('player2Id', '==', user.uid));
 
   const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
   const list = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() }));
 
-  // Optional filter by status if you want:
-  // return list.filter(g => g.status !== 'completed');
   return list;
 };
 
@@ -235,11 +351,10 @@ export const submitMyGuess = async (gameId, guessedMemberId) => {
     [fieldTime]: serverTimestamp()
   });
   
-  // Check if game is complete
   await checkGameProgress(gameId);
 };
 
-// Reveal my actual most-recent contact (manual pick from member list)
+// Reveal my actual most-recent contact
 export const submitMyActualContact = async (gameId, actualMemberId) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Must be logged in');
@@ -259,14 +374,14 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
     [fieldTime]: serverTimestamp()
   });
   
-  // Check if game is complete
   await checkGameProgress(gameId);
 };
 
-// --- Game state progression & resolution ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// GAME STATE PROGRESSION & RESOLUTION
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Re-evaluate game phase and compute results when ready
-  const checkGameProgress = async (gameId) => {
+const checkGameProgress = async (gameId) => {
   const gameRef = doc(db, 'games', gameId);
   const gameSnap = await getDoc(gameRef);
   
@@ -294,8 +409,7 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
     
     if (p1Correct && p2Correct) {
       outcome = 'both_correct';
-      winner = 'tie'; // both right → joint positive gesture
-      // Both players do something positive together
+      winner = 'tie';
       consequences.push({
         type: 'joint',
         description: 'Both players donate to charity or attend community event',
@@ -305,7 +419,6 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
     } else if (p1Correct && !p2Correct) {
       outcome = 'player1_correct';
       winner = 'player1';
-      // Player 2 owes consequence to player 1
       consequences.push({
         type: 'owed',
         fromPlayer: game.player2Id,
@@ -315,7 +428,6 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
     } else if (!p1Correct && p2Correct) {
       outcome = 'player2_correct';
       winner = 'player2';
-      // Player 1 owes consequence to player 2
       consequences.push({
         type: 'owed',
         fromPlayer: game.player1Id,
@@ -324,8 +436,7 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
       });
     } else {
       outcome = 'both_wrong';
-      winner = 'none'; // clearer downstream handling
-      // Both owe consequences to the people they guessed
+      winner = 'none';
       consequences.push({
         type: 'owed',
         fromPlayer: game.player1Id,
@@ -340,7 +451,7 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
       });
     }
     
-// Persist outcome + consequences atomically
+    // Persist outcome + consequences atomically
     const batch = writeBatch(db);
 
     batch.update(gameRef, {
@@ -415,7 +526,7 @@ export const submitMyActualContact = async (gameId, actualMemberId) => {
   }
 };
 
-// For testing: Auto-fill mock player's moves
+// Auto-fill mock player's moves for testing
 export const autoFillMockPlayer = async (gameId) => {
   const gameRef = doc(db, 'games', gameId);
   const gameSnap = await getDoc(gameRef);
@@ -423,21 +534,17 @@ export const autoFillMockPlayer = async (gameId) => {
   if (!gameSnap.exists()) return;
   
   const game = gameSnap.data();
-  const currentUserId = auth.currentUser?.uid;
   
-  // Determine which player is the mock
   const isMockPlayer2 = isMockUser(game?.player2Id || '');
   const isMockPlayer1 = isMockUser(game?.player1Id || '');
   
   if (!isMockPlayer1 && !isMockPlayer2) return;
   
-  // Get community members for valid choices
   const { community } = await getCommunityMembers(game.communityId);
   const validMembers = community.members.filter(m => m !== game.player1Id && m !== game.player2Id);
   
   if (validMembers.length === 0) return;
   
-  // Random selection for mock player
   const randomMember = validMembers[Math.floor(Math.random() * validMembers.length)];
   
   const updates = {};
@@ -468,7 +575,7 @@ export const autoFillMockPlayer = async (gameId) => {
   }
 };
 
-// Convenience reads (optional but handy in App.js)
+// Convenience reads
 export const getGame = async (gameId) => {
   const ref = doc(db, 'games', gameId);
   const snap = await getDoc(ref);
@@ -486,7 +593,9 @@ export const listGameHistoryForUser = async () => {
   return games.filter(g => g.status === 'completed');
 };
 
-// ─── Consequences ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSEQUENCES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export const getConsequencesOwedByMe = async (includeCompleted = false) => {
   const user = auth.currentUser;

@@ -27,7 +27,10 @@ import {
   getUserCommunities,
   addMockMembers,
   getCommunityMembers,
-  getMockMemberName,
+  getUserDisplayName,      // <-- ADD THIS (replaces getUserDisplayName)
+  fetchUserDisplayNames,   // <-- ADD THIS
+  saveUserProfile,         // <-- ADD THIS
+  clearDisplayNameCache,   // <-- ADD THIS (for logout)
   createGame,
   getMyGames,
   submitMyGuess,
@@ -127,6 +130,10 @@ const handleSignup = async () => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(userCredential.user, { displayName: displayName });
+    
+    // NEW: Save profile to Firestore so other users can see the display name
+    await saveUserProfile(userCredential.user.uid, displayName);
+    
     Alert.alert('Success', 'Account created! Welcome to TouchBase!');
   } catch (error) {
     Alert.alert('Signup Failed', error.message);
@@ -222,6 +229,27 @@ function HomeScreen({ navigation }) {
 function MyGamesScreen({ navigation }) {
   const [games, setGames] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [namesLoaded, setNamesLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadNames = async () => {
+      // Collect all unique user IDs from games
+      const userIds = new Set();
+      games.forEach(g => {
+        if (g.player1Id) userIds.add(g.player1Id);
+        if (g.player2Id) userIds.add(g.player2Id);
+      });
+      
+      if (userIds.size > 0) {
+        await fetchUserDisplayNames(Array.from(userIds));
+        setNamesLoaded(true);
+      }
+    };
+    
+    if (games.length > 0) {
+      loadNames();
+    }
+  }, [games]);
 
   // Set up listeners exactly once for the current user
   React.useEffect(() => {
@@ -290,8 +318,8 @@ function MyGamesScreen({ navigation }) {
         >
           <Text style={styles.communityName}>
             Game vs. {g.player1Id === auth.currentUser.uid
-              ? getMockMemberName(g.player2Id)
-              : getMockMemberName(g.player1Id)}
+              ? getUserDisplayName(g.player2Id)
+              : getUserDisplayName(g.player1Id)}
           </Text>
           <Text style={styles.memberCount}>Status: {g.status || 'active'}</Text>
         </TouchableOpacity>
@@ -359,7 +387,7 @@ function ConsequencesScreen() {
           owedByMe.map((c) => (
             <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' }}>
               <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
-              <Text style={{ color: '#666', marginTop: 4 }}>To: {getMockMemberName(c.targetId)}</Text>
+              <Text style={{ color: '#666', marginTop: 4 }}>To: {getUserDisplayName(c.targetId)}</Text>
               <TouchableOpacity
                 style={[styles.smallButton, { marginTop: 8 }]}
                 onPress={() => handleComplete(c.id)}
@@ -380,7 +408,7 @@ function ConsequencesScreen() {
           owedToMe.map((c) => (
             <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' }}>
               <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
-              <Text style={{ color: '#666', marginTop: 4 }}>From: {getMockMemberName(c.playerId)}</Text>
+              <Text style={{ color: '#666', marginTop: 4 }}>From: {getUserDisplayName(c.playerId)}</Text>
             </View>
           ))
         )}
@@ -395,6 +423,17 @@ function GameScreen({ route, navigation }) {
   const [game, setGame] = React.useState(null);
   const [members, setMembers] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
+  const [namesLoaded, setNamesLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadNames = async () => {
+      if (members.length > 0) {
+        await fetchUserDisplayNames(members);
+        setNamesLoaded(true);
+      }
+    };
+    loadNames();
+  }, [members]);
 
   React.useEffect(() => {
     const unsub = onSnapshot(doc(db, 'games', gameId), (snap) => {
@@ -484,12 +523,12 @@ function GameScreen({ route, navigation }) {
                   : 'You Lost'}
           </Text>
 
-          <Text style={styles.memberCount}>Your guess: {myGuess ? getMockMemberName(myGuess) : '—'}</Text>
-          <Text style={styles.memberCount}>They actually contacted: {opponentActual ? getMockMemberName(opponentActual) : '—'}</Text>
+          <Text style={styles.memberCount}>Your guess: {myGuess ? getUserDisplayName(myGuess) : '—'}</Text>
+          <Text style={styles.memberCount}>They actually contacted: {opponentActual ? getUserDisplayName(opponentActual) : '—'}</Text>
 
           <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ddd' }}>
-            <Text style={styles.memberCount}>Their guess: {opponentGuess ? getMockMemberName(opponentGuess) : '—'}</Text>
-            <Text style={styles.memberCount}>You actually contacted: {myActual ? getMockMemberName(myActual) : '—'}</Text>
+            <Text style={styles.memberCount}>Their guess: {opponentGuess ? getUserDisplayName(opponentGuess) : '—'}</Text>
+            <Text style={styles.memberCount}>You actually contacted: {myActual ? getUserDisplayName(myActual) : '—'}</Text>
           </View>
         </View>
 
@@ -538,8 +577,8 @@ function GameScreen({ route, navigation }) {
         <Text style={styles.subtitle}>Your moves are submitted. Waiting for opponent...</Text>
 
         <View style={styles.communityCard}>
-          <Text style={styles.communityName}>Your guess: {getMockMemberName(myGuess)}</Text>
-          <Text style={styles.memberCount}>Your actual contact: {getMockMemberName(myActual)}</Text>
+          <Text style={styles.communityName}>Your guess: {getUserDisplayName(myGuess)}</Text>
+          <Text style={styles.memberCount}>Your actual contact: {getUserDisplayName(myActual)}</Text>
         </View>
       </View>
     );
@@ -568,13 +607,13 @@ function GameScreen({ route, navigation }) {
               onPress={() => handleGuess(m)}
               disabled={busy}
             >
-              <Text style={styles.opponentName}>{getMockMemberName(m)}</Text>
+              <Text style={styles.opponentName}>{getUserDisplayName(m)}</Text>
             </TouchableOpacity>
           ))
       ) : (
         <>
           <View style={styles.communityCard}>
-            <Text style={styles.memberCount}>Your guess was: {getMockMemberName(myGuess)}</Text>
+            <Text style={styles.memberCount}>Your guess was: {getUserDisplayName(myGuess)}</Text>
           </View>
 
           {members
@@ -586,7 +625,7 @@ function GameScreen({ route, navigation }) {
                 onPress={() => handleReveal(m)}
                 disabled={busy}
               >
-                <Text style={styles.opponentName}>{getMockMemberName(m)}</Text>
+                <Text style={styles.opponentName}>{getUserDisplayName(m)}</Text>
               </TouchableOpacity>
             ))}
         </>
@@ -612,6 +651,24 @@ function CommunityListScreen({ navigation }) {
     }
   };
 
+  React.useEffect(() => {
+  const loadAllMemberNames = async () => {
+    const allMemberIds = new Set();
+    communities.forEach(c => {
+      c.members?.forEach(m => allMemberIds.add(m));
+    });
+    
+    if (allMemberIds.size > 0) {
+      await fetchUserDisplayNames(Array.from(allMemberIds));
+    }
+  };
+  
+  if (communities.length > 0) {
+    loadAllMemberNames();
+  }
+}, [communities]);
+
+
   const goToCreateCommunity = () => {
     navigation.navigate('CreateCommunity');
   };
@@ -631,6 +688,7 @@ function CommunityListScreen({ navigation }) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Logout', onPress: async () => {
+          clearDisplayNameCache();  // <-- ADD THIS LINE
           await signOut(auth);
         }}
       ]
@@ -816,13 +874,14 @@ function GameListScreen({ navigation }) {
       const result = await getCommunityMembers(community.id);
       setSelectedCommunity(community);
       setAvailableOpponents(result.availableOpponents);
+      await fetchUserDisplayNames(result.availableOpponents);
     } catch (error) {
       Alert.alert('Error', 'Failed to load community members');
     }
   };
 
   const createGameWithOpponent = (opponentId) => {
-    const opponentName = getMockMemberName(opponentId);
+    const opponentName = getUserDisplayName(opponentId);
     Alert.alert(
       'Create Game',
       `Start TouchBase game with ${opponentName}?`,
@@ -866,7 +925,7 @@ const handleCreateGame = async (communityId, opponentId) => {
             style={styles.opponentCard}
             onPress={() => createGameWithOpponent(opponentId)}
           >
-            <Text style={styles.opponentName}>{getMockMemberName(opponentId)}</Text>
+            <Text style={styles.opponentName}>{getUserDisplayName(opponentId)}</Text>
           </TouchableOpacity>
         ))}
 
