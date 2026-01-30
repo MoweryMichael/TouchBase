@@ -833,16 +833,26 @@ function GameListScreen({ navigation }) {
     );
   };
 
-  const handleCreateGame = async (communityId, opponentId) => {
-    try {
-      const game = await createGame(communityId, opponentId);
-      Alert.alert('Game Created!', 'Ready to start guessing', [
-        { text: 'OK', onPress: () => navigation.navigate('Game', { gameId: game.id }) }
-      ]);
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    }
-  };
+const handleCreateGame = async (communityId, opponentId) => {
+  console.log('=== CREATE GAME DEBUG ===');
+  console.log('communityId:', communityId);
+  console.log('opponentId:', opponentId);
+  console.log('currentUser:', auth.currentUser?.uid);
+  
+  try {
+    const game = await createGame(communityId, opponentId);
+    console.log('Game created successfully:', game.id);
+    Alert.alert('Game Created!', 'Ready to start guessing', [
+      { text: 'OK', onPress: () => navigation.navigate('Game', { gameId: game.id }) }
+    ]);
+  } catch (error) {
+    console.log('=== ERROR DETAILS ===');
+    console.log('Error code:', error.code);
+    console.log('Error message:', error.message);
+    console.log('Full error:', JSON.stringify(error, null, 2));
+    Alert.alert('Error', `${error.code || 'Unknown'}: ${error.message}`);
+  }
+};
 
   if (selectedCommunity) {
     return (

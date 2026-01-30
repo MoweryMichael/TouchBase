@@ -92,7 +92,13 @@ export const createGame = async (communityId, opponentId) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Must be logged in');
 
+  console.log('createGame: Starting...');
+  console.log('createGame: user.uid =', user.uid);
+  console.log('createGame: communityId =', communityId);
+  console.log('createGame: opponentId =', opponentId);
+
   const botOpponent = isMockUser(opponentId);
+  console.log('createGame: botOpponent =', botOpponent);
 
   const game = {
     communityId,
@@ -112,14 +118,29 @@ export const createGame = async (communityId, opponentId) => {
     outcome: null,
     gameCompletedAt: null,
     consequences: [],
-    // write both for backwards compatibility
+    consequencesPersisted: null,  // ADD THIS LINE - it was missing
     isBotOpponent: botOpponent,
     botOpponent: botOpponent,
   };
 
-  const docRef = await addDoc(collection(db, 'games'), game);
-  if (botOpponent) await autoFillMockPlayer(docRef.id);
-  return { id: docRef.id, ...game };
+  console.log('createGame: About to addDoc...');
+  
+  try {
+    const docRef = await addDoc(collection(db, 'games'), game);
+    console.log('createGame: Game doc created:', docRef.id);
+    
+    if (botOpponent) {
+      console.log('createGame: About to autoFillMockPlayer...');
+      await autoFillMockPlayer(docRef.id);
+      console.log('createGame: autoFillMockPlayer complete');
+    }
+    
+    return { id: docRef.id, ...game };
+  } catch (e) {
+    console.log('createGame: FAILED at addDoc or autoFill');
+    console.log('createGame error:', e.code, e.message);
+    throw e;
+  }
 };
 
 
