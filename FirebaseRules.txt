@@ -1,0 +1,340 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function communityData(communityId) {
+      return get(/databases/$(database)/documents/communities/$(communityId)).data;
+    }
+
+    function isCommunityMember(communityId) {
+      return isAuthenticated()
+        && (uid() in communityData(communityId).members);
+    }
+
+    function isCommunityCreatorOrAdmin(communityId) {
+      return isAuthenticated()
+        && (
+          uid() == communityData(communityId).createdBy
+          || (communityData(communityId).admins != null && uid() in communityData(communityId).admins)
+        );
+    }
+
+    function isNonEmptyString(x, maxLen) {
+      return x is string && x.size() > 0 && x.size() <= maxLen;
+    }
+
+    function isStringOrNull(x) {
+      return x == null || x is string;
+    }
+
+    function keysAreOnly(data, allowed) {
+      return data.keys().hasOnly(allowed);
+    }
+
+    function changedKeysOnly(allowed) {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowed);
+    }
+
+    function gameData(gameId) {
+      return get(/databases/$(database)/documents/games/$(gameId)).data;
+    }
+
+    function isGameParticipant(gameId) {
+      return isAuthenticated()
+        && (uid() == gameData(gameId).player1Id || uid() == gameData(gameId).player2Id);
+    }
+
+    function isCompletedGame(gameId) {
+      return gameData(gameId).status == 'completed'
+        && gameData(gameId).player1ActualContact != null
+        && gameData(gameId).player2ActualContact != null;
+    }
+    
+    function isTimestampOrServerTime(x) {
+  		return (x is timestamp) || (x == request.time);
+		}
+
+
+    match /communities/{communityId} {
+
+      // Read only if you are in members (no circular get)
+      allow read: if isAuthenticated() && (uid() in resource.data.members);
+
+      // Create must match your actual community schema
+      allow create: if isAuthenticated()
+        && keysAreOnly(request.resource.data, [
+          'name',
+          'description',
+          'createdBy',
+          'createdAt',
+          'inviteCode',
+          'members',
+          'isActive'
+        ])
+        && request.resource.data.createdBy == uid()
+        && isNonEmptyString(request.resource.data.name, 80)
+        && (request.resource.data.description == null || request.resource.data.description is string)
+        && isNonEmptyString(request.resource.data.inviteCode, 12)
+        && request.resource.data.members is list
+        && request.resource.data.members.size() >= 1
+        && request.resource.data.members.size() <= 500
+        && (uid() in request.resource.data.members)
+        && request.resource.data.isActive is bool
+				&& isTimestampOrServerTime(request.resource.data.createdAt)
+
+      // Update only if you are the creator (simple + safe for now)
+      // If you want admins later, we can add an admins array and allow them too.
+      allow update: if isAuthenticated()
+        && uid() == resource.data.createdBy
+        && changedKeysOnly(['name', 'description', 'members', 'isActive'])
+        && isNonEmptyString(request.resource.data.name, 80)
+        && (request.resource.data.description == null || request.resource.data.description is string)
+        && request.resource.data.members is list
+        && request.resource.data.members.size() >= 1
+        && request.resource.data.members.size() <= 500
+        && request.resource.data.isActive is bool
+        // immutable fields cannot change
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.inviteCode == resource.data.inviteCode;
+
+      allow delete: if false;
+    }
+
+    match /games/{gameId} {
+
+      function isMockId(x) {
+        return x is string && x.matches('^mock_user_.*');
+      }
+
+      function bothGuessed(data) {
+        return data.player1Guess != null && data.player2Guess != null;
+      }
+
+      function bothRevealed(data) {
+        return data.player1ActualContact != null && data.player2ActualContact != null;
+      }
+
+      allow read: if isAuthenticated()
+        && (uid() == resource.data.player1Id || uid() == resource.data.player2Id);
+
+      allow create: if isAuthenticated()
+        && keysAreOnly(request.resource.data, [
+          'communityId',
+          'player1Id',
+          'player2Id',
+          'status',
+          'createdAt',
+
+          'player1Guess',
+          'player2Guess',
+          'player1GuessSubmittedAt',
+          'player2GuessSubmittedAt',
+
+          'player1ActualContact',
+          'player2ActualContact',
+          'player1RevealedAt',
+          'player2RevealedAt',
+
+          'winner',
+          'outcome',
+          'gameCompletedAt',
+
+          'consequences',
+          'consequencesPersisted',
+
+          'isBotOpponent',
+          'botOpponent'
+        ])
+        && request.resource.data.player1Id == uid()
+        && request.resource.data.player2Id is string
+        && request.resource.data.player2Id != uid()
+        && request.resource.data.communityId is string
+        && isCommunityMember(request.resource.data.communityId)
+        && (request.resource.data.player2Id in communityData(request.resource.data.communityId).members)
+
+        && request.resource.data.status == 'active'
+				&& isTimestampOrServerTime(request.resource.data.createdAt)
+
+        && request.resource.data.player1Guess == null
+        && request.resource.data.player2Guess == null
+        && request.resource.data.player1GuessSubmittedAt == null
+        && request.resource.data.player2GuessSubmittedAt == null
+
+        && request.resource.data.player1ActualContact == null
+        && request.resource.data.player2ActualContact == null
+        && request.resource.data.player1RevealedAt == null
+        && request.resource.data.player2RevealedAt == null
+
+        && request.resource.data.winner == null
+        && request.resource.data.outcome == null
+        && request.resource.data.gameCompletedAt == null
+
+        && request.resource.data.consequences is list
+        && request.resource.data.consequences.size() >= 0
+
+        && (request.resource.data.consequencesPersisted == null || request.resource.data.consequencesPersisted is bool)
+        && (request.resource.data.isBotOpponent == null || request.resource.data.isBotOpponent is bool)
+        && (request.resource.data.botOpponent == null || request.resource.data.botOpponent is bool);
+
+      allow update: if isAuthenticated()
+        && (uid() == resource.data.player1Id || uid() == resource.data.player2Id)
+
+        // Immutable fields cannot change
+        && request.resource.data.communityId == resource.data.communityId
+        && request.resource.data.player1Id == resource.data.player1Id
+        && request.resource.data.player2Id == resource.data.player2Id
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.isBotOpponent == resource.data.isBotOpponent
+        && request.resource.data.botOpponent == resource.data.botOpponent
+
+        // Only allow these fields to change
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'player1Guess',
+          'player2Guess',
+          'player1GuessSubmittedAt',
+          'player2GuessSubmittedAt',
+          'player1ActualContact',
+          'player2ActualContact',
+          'player1RevealedAt',
+          'player2RevealedAt',
+          'status',
+          'outcome',
+          'winner',
+          'gameCompletedAt',
+          'consequences',
+          'consequencesPersisted'
+        ])
+
+        // Type checks
+        && isStringOrNull(request.resource.data.player1Guess)
+        && isStringOrNull(request.resource.data.player2Guess)
+				&& (request.resource.data.player1GuessSubmittedAt == null || isTimestampOrServerTime(request.resource.data.player1GuessSubmittedAt))
+				&& (request.resource.data.player2GuessSubmittedAt == null || isTimestampOrServerTime(request.resource.data.player2GuessSubmittedAt))
+
+        && isStringOrNull(request.resource.data.player1ActualContact)
+        && isStringOrNull(request.resource.data.player2ActualContact)
+        && (request.resource.data.player1RevealedAt == null || isTimestampOrServerTime(request.resource.data.player1RevealedAt))
+				&& (request.resource.data.player2RevealedAt == null || isTimestampOrServerTime(request.resource.data.player2RevealedAt))
+
+				&& (request.resource.data.gameCompletedAt == null || isTimestampOrServerTime(request.resource.data.gameCompletedAt))        && (request.resource.data.consequencesPersisted == null || request.resource.data.consequencesPersisted is bool)
+        && (request.resource.data.consequences == null || request.resource.data.consequences is list)
+
+        // Prevent overwrites: guesses/reveals can only be set once
+        && (resource.data.player1Guess == null || request.resource.data.player1Guess == resource.data.player1Guess)
+        && (resource.data.player2Guess == null || request.resource.data.player2Guess == resource.data.player2Guess)
+        && (resource.data.player1ActualContact == null || request.resource.data.player1ActualContact == resource.data.player1ActualContact)
+        && (resource.data.player2ActualContact == null || request.resource.data.player2ActualContact == resource.data.player2ActualContact)
+
+        // Normal case: each player can only write their own fields
+        // BUT: allow the human player to write the mock player's fields (for your solo testing)
+        && (
+          // player1 acting normally, or controlling mock player2
+          (uid() == resource.data.player1Id
+            && (
+              // normal: cannot change player2 fields
+              (
+                !isMockId(resource.data.player2Id)
+                && request.resource.data.player2Guess == resource.data.player2Guess
+                && request.resource.data.player2GuessSubmittedAt == resource.data.player2GuessSubmittedAt
+                && request.resource.data.player2ActualContact == resource.data.player2ActualContact
+                && request.resource.data.player2RevealedAt == resource.data.player2RevealedAt
+              )
+              ||
+              // mock: allowed
+              isMockId(resource.data.player2Id)
+            )
+          )
+          ||
+          // player2 acting normally, or controlling mock player1
+          (uid() == resource.data.player2Id
+            && (
+              (
+                !isMockId(resource.data.player1Id)
+                && request.resource.data.player1Guess == resource.data.player1Guess
+                && request.resource.data.player1GuessSubmittedAt == resource.data.player1GuessSubmittedAt
+                && request.resource.data.player1ActualContact == resource.data.player1ActualContact
+                && request.resource.data.player1RevealedAt == resource.data.player1RevealedAt
+              )
+              ||
+              isMockId(resource.data.player1Id)
+            )
+          )
+        )
+
+        // Status transitions you use
+        && (
+          request.resource.data.status in ['active', 'guessing_complete', 'completed']
+        )
+
+        // Only allow completion fields when both revealed
+        && (
+          request.resource.data.status != 'completed'
+          || (
+            bothRevealed(request.resource.data)
+            && request.resource.data.outcome is string
+            && request.resource.data.winner in ['player1', 'player2', 'tie', 'none']
+						&& isTimestampOrServerTime(request.resource.data.gameCompletedAt)
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /users/{userId} {
+      // Tight: only the user can read/write their own doc.
+      allow read: if isAuthenticated() && uid() == userId;
+      allow write: if isAuthenticated() && uid() == userId;
+    }
+
+    match /consequences/{consequenceId} {
+
+      allow read: if isAuthenticated()
+        && (uid() == resource.data.playerId || uid() == resource.data.targetId);
+
+      allow create: if isAuthenticated()
+        && keysAreOnly(request.resource.data, [
+          'id',
+          'fromGameId',
+          'communityId',
+          'playerId',
+          'targetId',
+          'type',
+          'description',
+          'completed',
+          'completedAt',
+          'proofText',
+          'createdAt'
+        ])
+        && request.resource.data.id == consequenceId
+        && request.resource.data.playerId == uid()
+        && request.resource.data.fromGameId is string
+        && request.resource.data.communityId is string
+        && isCommunityMember(request.resource.data.communityId)
+        && (request.resource.data.targetId in communityData(request.resource.data.communityId).members)
+        && request.resource.data.type in ['owed', 'joint']
+        && isNonEmptyString(request.resource.data.description, 240)
+        && request.resource.data.completed is bool
+        && (request.resource.data.completedAt == null || isTimestampOrServerTime(request.resource.data.completedAt))
+        && (request.resource.data.proofText == null || request.resource.data.proofText is string)
+				&& isTimestampOrServerTime(request.resource.data.createdAt)
+
+      allow update: if isAuthenticated()
+        && uid() == resource.data.playerId
+        && changedKeysOnly(['completed', 'completedAt', 'proofText'])
+        && (request.resource.data.completed is bool)
+        && (request.resource.data.completedAt == null || isTimestampOrServerTime(request.resource.data.completedAt))
+        && (request.resource.data.proofText == null || request.resource.data.proofText is string);
+
+      allow delete: if false;
+    }
+  }
+}
