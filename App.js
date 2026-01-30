@@ -469,7 +469,7 @@ function GameScreen({ route, navigation }) {
     const bothWrong = game.outcome === 'both_wrong' || game.winner === 'none';
 
     return (
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={styles.title}>Game Complete!</Text>
 
         <View style={styles.communityCard}>
@@ -502,15 +502,21 @@ function GameScreen({ route, navigation }) {
           </View>
         )}
 
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: '#FF9500' }]}
+          onPress={() => navigation.navigate('Consequences')}
+        >
+          <Text style={styles.buttonText}>My Consequences</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('MyGames')}>
           <Text style={styles.buttonText}>Back to Games</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
   // Mid-game flags
-  const bothGuessed = Boolean(game.player1Guess && game.player2Guess);
   const bothRevealed = Boolean(game.player1ActualContact && game.player2ActualContact);
 
   const showGuessPhase = !myGuess;
@@ -541,7 +547,7 @@ function GameScreen({ route, navigation }) {
 
   // Active game
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
       <Text style={styles.title}>{showGuessPhase ? 'Make Your Guess' : 'Reveal Your Contact'}</Text>
 
       {statusBanner}
@@ -585,7 +591,7 @@ function GameScreen({ route, navigation }) {
             ))}
         </>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
