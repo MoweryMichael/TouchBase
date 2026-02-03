@@ -50,16 +50,16 @@ import {
  } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
-// Design System - Warm & Friendly
+// Design System - Gem Tones
 const COLORS = {
-  primary: '#E07A5F',      // Terracotta - buttons, links, accents
-  secondary: '#3D405B',    // Deep blue-gray - headers, text
-  accent: '#81B29A',       // Sage green - success, positive actions
-  background: '#F4F1DE',   // Warm cream - screen backgrounds
-  card: '#FFFFFF',         // White - cards
-  text: '#3D405B',         // Primary text
-  textLight: '#6B6E7B',    // Secondary text
-  border: '#E8E4D9',       // Subtle borders
+  primary: '#9B2335',      // Ruby - rich red, luxurious
+  secondary: '#1E4D5C',    // Deep teal - grounded, sophisticated  
+  accent: '#2E7D6B',       // Emerald - positive, vibrant
+  background: '#FAF9F7',   // Soft warm white - lets gems pop
+  card: '#FFFFFF',         // White cards
+  text: '#1E3A3A',         // Deep teal-black
+  textLight: '#5C7A7A',    // Muted teal
+  border: '#E5E2DD',       // Warm gray border
   white: '#FFFFFF',
 };
 
