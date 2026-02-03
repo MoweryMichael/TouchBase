@@ -24,14 +24,6 @@ import {
 // In-memory cache for display names (survives across component renders)
 const displayNameCache = new Map();
 
-// Mock user names
-const MOCK_NAMES = {
-  'mock_user_1_sarah': 'Sarah Chen',
-  'mock_user_2_mike': 'Mike Rodriguez',
-  'mock_user_3_jessica': 'Jessica Kim',
-  'mock_user_4_alex': 'Alex Thompson'
-};
-
 // Create or update user profile in Firestore
 // Call this after signup and optionally on login
 export const saveUserProfile = async (userId, displayName) => {
@@ -255,23 +247,6 @@ export const getCommunityMembers = async (communityId) => {
     community: { id: communityId, ...community },
     availableOpponents: otherMembers
   };
-};
-
-// Add mock members to community for testing
-export const addMockMembers = async (communityId) => {
-  const mockMembers = [
-    'mock_user_1_sarah',
-    'mock_user_2_mike', 
-    'mock_user_3_jessica',
-    'mock_user_4_alex'
-  ];
-
-  const communityRef = doc(db, 'communities', communityId);
-  await updateDoc(communityRef, {
-    members: arrayUnion(...mockMembers)
-  });
-
-  return mockMembers;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

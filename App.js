@@ -25,12 +25,11 @@ import {
   generateInviteCode,
   joinCommunity,
   getUserCommunities,
-  addMockMembers,
   getCommunityMembers,
-  getUserDisplayName,      // <-- ADD THIS (replaces getUserDisplayName)
-  fetchUserDisplayNames,   // <-- ADD THIS
-  saveUserProfile,         // <-- ADD THIS
-  clearDisplayNameCache,   // <-- ADD THIS (for logout)
+  getUserDisplayName,
+  fetchUserDisplayNames,
+  saveUserProfile,
+  clearDisplayNameCache,
   createGame,
   getMyGames,
   submitMyGuess,
@@ -187,39 +186,6 @@ const handleSignup = async () => {
 
       <TouchableOpacity style={styles.linkContainer} onPress={goToLogin}>
         <Text style={styles.linkText}>Already have an account? Login</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-// Home Screen Component (what users see after logging in)
-function HomeScreen({ navigation }) {
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: () => navigation.navigate('Login') }
-      ]
-    );
-  };
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to TouchBase!</Text>
-      <Text style={styles.subtitle}>Your communities will appear here</Text>
-      
-      <View style={styles.homeContent}>
-        <Text style={styles.homeText}>🎉 You're logged in!</Text>
-        <Text style={styles.homeText}>Soon you'll see:</Text>
-        <Text style={styles.listItem}>• Your communities</Text>
-        <Text style={styles.listItem}>• Active games</Text>
-        <Text style={styles.listItem}>• Pending consequences</Text>
-      </View>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Logout</Text>
       </TouchableOpacity>
     </View>
   );
@@ -698,7 +664,7 @@ function CommunityListScreen({ navigation }) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Logout', onPress: async () => {
-          clearDisplayNameCache();  // <-- ADD THIS LINE
+          clearDisplayNameCache();
           await signOut(auth);
         }}
       ]
@@ -885,27 +851,6 @@ function GameListScreen({ navigation }) {
       ]
     );
   };
-
-const handleCreateGame = async (communityId, opponentId) => {
-  console.log('=== CREATE GAME DEBUG ===');
-  console.log('communityId:', communityId);
-  console.log('opponentId:', opponentId);
-  console.log('currentUser:', auth.currentUser?.uid);
-  
-  try {
-    const game = await createGame(communityId, opponentId);
-    console.log('Game created successfully:', game.id);
-    Alert.alert('Game Created!', 'Ready to start guessing', [
-      { text: 'OK', onPress: () => navigation.navigate('Game', { gameId: game.id }) }
-    ]);
-  } catch (error) {
-    console.log('=== ERROR DETAILS ===');
-    console.log('Error code:', error.code);
-    console.log('Error message:', error.message);
-    console.log('Full error:', JSON.stringify(error, null, 2));
-    Alert.alert('Error', `${error.code || 'Unknown'}: ${error.message}`);
-  }
-};
 
   if (selectedCommunity) {
     return (
