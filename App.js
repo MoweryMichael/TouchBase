@@ -706,7 +706,7 @@ function CommunityListScreen({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: COLORS.primary }]}
+        style={[styles.button, styles.secondaryButton]}
         onPress={() => navigation.navigate('Consequences')}
       >
         <Text style={styles.buttonText}>My Consequences</Text>
@@ -716,7 +716,7 @@ function CommunityListScreen({ navigation }) {
         <Text style={styles.buttonText}>Create Community</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.button, styles.tertiaryButton]} onPress={goToJoinCommunity}>
+      <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToJoinCommunity}>
         <Text style={styles.buttonText}>Join Community</Text>
       </TouchableOpacity>
 
