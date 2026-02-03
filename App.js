@@ -50,6 +50,19 @@ import {
  } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
+// Design System - Warm & Friendly
+const COLORS = {
+  primary: '#E07A5F',      // Terracotta - buttons, links, accents
+  secondary: '#3D405B',    // Deep blue-gray - headers, text
+  accent: '#81B29A',       // Sage green - success, positive actions
+  background: '#F4F1DE',   // Warm cream - screen backgrounds
+  card: '#FFFFFF',         // White - cards
+  text: '#3D405B',         // Primary text
+  textLight: '#6B6E7B',    // Secondary text
+  border: '#E8E4D9',       // Subtle borders
+  white: '#FFFFFF',
+};
+
 // Create the navigation stack
 const Stack = createStackNavigator();
 
@@ -265,7 +278,7 @@ function MyGamesScreen({ navigation }) {
   if (deduped.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={{ color: '#666', marginBottom: 20 }}>No games yet.</Text>
+        <Text style={{ color: COLORS.textLight, marginBottom: 20 }}>No games yet.</Text>
         <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('GameList')}>
           <Text style={styles.buttonText}>Start New Game</Text>
         </TouchableOpacity>
@@ -338,7 +351,7 @@ function ConsequencesScreen() {
       <Text style={styles.title}>My Consequences</Text>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: '#8E8E93', marginBottom: 12 }]}
+        style={[styles.button, { backgroundColor: COLORS.secondary, marginBottom: 12 }]}
         onPress={load}
         disabled={busy}
       >
@@ -348,12 +361,12 @@ function ConsequencesScreen() {
       <View style={styles.communityCard}>
         <Text style={styles.communityName}>I Owe</Text>
         {owedByMe.length === 0 ? (
-          <Text style={{ color: '#666' }}>Nothing owed right now.</Text>
+          <Text style={{ color: COLORS.textLight }}>Nothing owed right now.</Text>
         ) : (
           owedByMe.map((c) => (
-            <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' }}>
+            <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border }}>
               <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
-              <Text style={{ color: '#666', marginTop: 4 }}>To: {getUserDisplayName(c.targetId)}</Text>
+              <Text style={{ color: COLORS.textLight, marginTop: 4 }}>To: {getUserDisplayName(c.targetId)}</Text>
               <TouchableOpacity
                 style={[styles.smallButton, { marginTop: 8 }]}
                 onPress={() => handleComplete(c.id)}
@@ -369,12 +382,12 @@ function ConsequencesScreen() {
       <View style={styles.communityCard}>
         <Text style={styles.communityName}>Owed To Me</Text>
         {owedToMe.length === 0 ? (
-          <Text style={{ color: '#666' }}>No one owes you anything right now.</Text>
+          <Text style={{ color: COLORS.textLight }}>No one owes you anything right now.</Text>
         ) : (
           owedToMe.map((c) => (
-            <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' }}>
+            <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border }}>
               <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
-              <Text style={{ color: '#666', marginTop: 4 }}>From: {getUserDisplayName(c.playerId)}</Text>
+              <Text style={{ color: COLORS.textLight, marginTop: 4 }}>From: {getUserDisplayName(c.playerId)}</Text>
             </View>
           ))
         )}
@@ -492,7 +505,7 @@ function GameScreen({ route, navigation }) {
           <Text style={styles.memberCount}>Your guess: {myGuess ? getUserDisplayName(myGuess) : '—'}</Text>
           <Text style={styles.memberCount}>They actually contacted: {opponentActual ? getUserDisplayName(opponentActual) : '—'}</Text>
 
-          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ddd' }}>
+          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border }}>
             <Text style={styles.memberCount}>Their guess: {opponentGuess ? getUserDisplayName(opponentGuess) : '—'}</Text>
             <Text style={styles.memberCount}>You actually contacted: {myActual ? getUserDisplayName(myActual) : '—'}</Text>
           </View>
@@ -508,14 +521,14 @@ function GameScreen({ route, navigation }) {
         )}
 
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#FF9500' }]}
+          style={[styles.button, { backgroundColor: COLORS.primary }]}
           onPress={() => navigation.navigate('Consequences')}
         >
           <Text style={styles.buttonText}>My Consequences</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.button, { marginTop: 30, backgroundColor: '#34C759' }]}
+          style={[styles.button, { marginTop: 30, backgroundColor: COLORS.accent }]}
           onPress={() => {
             navigation.reset({
               index: 0,
@@ -537,7 +550,7 @@ function GameScreen({ route, navigation }) {
   const waitingForOpponent = myGuess && myActual && !game.outcome;
 
   const statusBanner = (game.status === 'guessing_complete' && !bothRevealed) ? (
-    <View style={[styles.communityCard, { borderLeftWidth: 4, borderLeftColor: '#007AFF' }]}>
+    <View style={[styles.communityCard, { borderLeftWidth: 4, borderLeftColor: COLORS.primary }]}>
       <Text style={styles.memberCount}>Both guesses are in — time to reveal your actual contact.</Text>
     </View>
   ) : null;
@@ -595,7 +608,7 @@ function GameScreen({ route, navigation }) {
             .map(m => (
               <TouchableOpacity
                 key={m}
-                style={[styles.opponentCard, { backgroundColor: '#34C759' }]}
+                style={[styles.opponentCard, { backgroundColor: COLORS.accent }]}
                 onPress={() => handleReveal(m)}
                 disabled={busy}
               >
@@ -693,7 +706,7 @@ function CommunityListScreen({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: '#FF9500' }]}
+        style={[styles.button, { backgroundColor: COLORS.primary }]}
         onPress={() => navigation.navigate('Consequences')}
       >
         <Text style={styles.buttonText}>My Consequences</Text>
@@ -851,6 +864,17 @@ function GameListScreen({ navigation }) {
       ]
     );
   };
+  
+    const handleCreateGame = async (communityId, opponentId) => {
+    try {
+      const game = await createGame(communityId, opponentId);
+      Alert.alert('Game Created!', 'Ready to start guessing', [
+        { text: 'OK', onPress: () => navigation.navigate('Game', { gameId: game.id }) }
+      ]);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
 
   if (selectedCommunity) {
     return (
@@ -928,8 +952,8 @@ export default function App() {
     <Stack.Navigator 
       initialRouteName="Login"
       screenOptions={{
-        headerStyle: { backgroundColor: '#007AFF' },
-        headerTintColor: 'white',
+        headerStyle: { backgroundColor: COLORS.secondary },
+        headerTintColor: COLORS.white,
         headerTitleStyle: { fontWeight: 'bold' }
       }}
     >
@@ -943,8 +967,8 @@ export default function App() {
     <Stack.Navigator 
       initialRouteName="Home"
       screenOptions={{
-        headerStyle: { backgroundColor: '#007AFF' },
-        headerTintColor: 'white',
+        headerStyle: { backgroundColor: COLORS.secondary },
+        headerTintColor: COLORS.white,
         headerTitleStyle: { fontWeight: 'bold' }
       }}
     >
@@ -973,147 +997,139 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.background,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
   },
+  scrollContainer: {
+    flexGrow: 1,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 40,
+  },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#333',
+    color: COLORS.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: COLORS.textLight,
     marginBottom: 40,
+    textAlign: 'center',
   },
   input: {
     width: '100%',
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     paddingHorizontal: 15,
     marginBottom: 15,
     fontSize: 16,
+    backgroundColor: COLORS.white,
+    color: COLORS.text,
   },
   button: {
     width: '100%',
     height: 50,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
   },
   buttonText: {
-    color: 'white',
+    color: COLORS.white,
     fontSize: 18,
     fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.secondary,
+  },
+  accentButton: {
+    backgroundColor: COLORS.accent,
   },
   linkContainer: {
     marginTop: 10,
   },
   linkText: {
-    color: '#007AFF',
+    color: COLORS.primary,
     fontSize: 16,
-  },
-  homeContent: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  homeText: {
-    fontSize: 18,
-    color: '#333',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  listItem: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 5,
   },
   logoutButton: {
     width: '100%',
     height: 50,
-    backgroundColor: '#FF3B30',
-    borderRadius: 8,
+    backgroundColor: COLORS.secondary,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  textArea: {
-  height: 80,
-  textAlignVertical: 'top',
-  },
-  secondaryButton: {
-    backgroundColor: '#FF3B30',
-  },
-  secondaryButtonText: {
-    color: 'white',
-  },
   communityCard: {
-  width: '100%',
-  backgroundColor: '#f5f5f5',
-  padding: 15,
-  marginBottom: 10,
-  borderRadius: 8,
-},
-communityName: {
-  fontSize: 18,
-  fontWeight: 'bold',
-  marginBottom: 5,
-},
-memberCount: {
-  fontSize: 14,
-  color: '#666',
-},
-inviteCode: {
-  fontSize: 14,
-  color: '#007AFF',
-  fontWeight: '600',
-},
-tertiaryButton: {
-  backgroundColor: '#34C759',
-},
-opponentCard: {
-  width: '100%',
-  backgroundColor: '#007AFF',
-  padding: 15,
-  marginBottom: 10,
-  borderRadius: 8,
-},
-opponentName: {
-  fontSize: 16,
-  fontWeight: 'bold',
-  color: 'white',
-  textAlign: 'center',
-},
-backButton: {
-  width: '100%',
-  backgroundColor: '#666',
-  height: 50,
-  borderRadius: 8,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-smallButton: {
-  backgroundColor: '#34C759',
-  padding: 8,
-  borderRadius: 5,
-  marginTop: 8,
-},
-smallButtonText: {
-  color: 'white',
-  fontSize: 12,
-  fontWeight: '600',
-},
-scrollContainer: {
-    flexGrow: 1,
-    backgroundColor: '#fff',
+    width: '100%',
+    backgroundColor: COLORS.card,
+    padding: 18,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  communityName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 5,
+  },
+  memberCount: {
+    fontSize: 14,
+    color: COLORS.textLight,
+  },
+  inviteCode: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  opponentCard: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    padding: 18,
+    marginBottom: 12,
+    borderRadius: 12,
+  },
+  opponentName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'center',
+  },
+  backButton: {
+    width: '100%',
+    backgroundColor: COLORS.secondary,
+    height: 50,
+    borderRadius: 12,
     alignItems: 'center',
-    padding: 20,
-    paddingBottom: 40,
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  smallButton: {
+    backgroundColor: COLORS.accent,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  smallButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+    paddingTop: 12,
   },
 });
