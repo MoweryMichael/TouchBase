@@ -551,6 +551,18 @@ function GameScreen({ route, navigation }) {
         <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('MyGames')}>
           <Text style={styles.buttonText}>Back to Games</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.button, { marginTop: 30, backgroundColor: '#34C759' }]}
+          onPress={() => {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Home' }],
+            });
+          }}
+        >
+          <Text style={styles.buttonText}>Done - Back to Home</Text>
+        </TouchableOpacity>
       </ScrollView>
     );
   }
