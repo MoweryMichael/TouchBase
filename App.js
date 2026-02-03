@@ -1,7 +1,7 @@
 // This is my app.js file which holds basically the whole TouchBase app: game screens and other components and logic
 
 import React, { useState, useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { 
  View, 
@@ -646,9 +646,11 @@ function GameScreen({ route, navigation }) {
 function CommunityListScreen({ navigation }) {
   const [communities, setCommunities] = useState([]);
 
-  React.useEffect(() => {
-    loadCommunities();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCommunities();
+    }, [])
+  );
 
   const loadCommunities = async () => {
     try {
@@ -703,16 +705,6 @@ function CommunityListScreen({ navigation }) {
     );
   };
 
-  const addTestMembers = async (communityId) => {
-    try {
-      await addMockMembers(communityId);
-      Alert.alert('Success', 'Added 4 test members to community');
-      loadCommunities(); // Refresh the display
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    }
-  };
-
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
       <Text style={styles.title}>Your Communities</Text>
@@ -723,12 +715,6 @@ function CommunityListScreen({ navigation }) {
           <Text style={styles.communityName}>{community.name}</Text>
           <Text style={styles.memberCount}>{community.members.length} members</Text>
           <Text style={styles.inviteCode}>Code: {community.inviteCode}</Text>
-          <TouchableOpacity 
-            style={styles.smallButton} 
-            onPress={() => addTestMembers(community.id)}
-          >
-            <Text style={styles.smallButtonText}>Add Test Members</Text>
-          </TouchableOpacity>
         </View>
       ))}
 
