@@ -1,29 +1,37 @@
 {
   "expo": {
     "name": "TouchBase",
-    "slug": "TouchBase",
+    "slug": "touchbase",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#9B2335"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.touchbasegame.app",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#9B2335"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.touchbasegame.app",
+      "versionCode": 1
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "owner": ""
   }
 }
