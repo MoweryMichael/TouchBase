@@ -78,7 +78,11 @@ const handleLogin = async () => {
   }
   
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    // Ensure profile exists in Firestore (covers users who signed up before profile system)
+    if (userCredential.user.displayName) {
+      await saveUserProfile(userCredential.user.uid, userCredential.user.displayName);
+    }
   } catch (error) {
     Alert.alert('Login Failed', error.message);
   }
@@ -367,13 +371,6 @@ function ConsequencesScreen() {
             <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border }}>
               <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
               <Text style={{ color: COLORS.textLight, marginTop: 4 }}>To: {getUserDisplayName(c.targetId)}</Text>
-              <TouchableOpacity
-                style={[styles.smallButton, { marginTop: 8 }]}
-                onPress={() => handleComplete(c.id)}
-                disabled={busy}
-              >
-                <Text style={styles.smallButtonText}>Mark Complete</Text>
-              </TouchableOpacity>
             </View>
           ))
         )}
@@ -388,6 +385,13 @@ function ConsequencesScreen() {
             <View key={c.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border }}>
               <Text style={styles.memberCount}>{c.description || 'Consequence'}</Text>
               <Text style={{ color: COLORS.textLight, marginTop: 4 }}>From: {getUserDisplayName(c.playerId)}</Text>
+              <TouchableOpacity
+                style={[styles.smallButton, { marginTop: 8 }]}
+                onPress={() => handleComplete(c.id)}
+                disabled={busy}
+              >
+                <Text style={styles.smallButtonText}>Confirm Completed</Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -689,6 +693,15 @@ function CommunityListScreen({ navigation }) {
       <Text style={styles.title}>Your Communities</Text>
       <Text style={styles.subtitle}>Manage communities and start games</Text>
 
+      {communities.length === 0 && (
+        <View style={[styles.communityCard, { alignItems: 'center', borderStyle: 'dashed' }]}>
+          <Text style={[styles.communityName, { textAlign: 'center' }]}>No communities yet</Text>
+          <Text style={{ color: COLORS.textLight, textAlign: 'center', marginTop: 4 }}>
+            Create one or join with an invite code to get started.
+          </Text>
+        </View>
+      )}
+
       {communities.map(community => (
         <View key={community.id} style={styles.communityCard}>
           <Text style={styles.communityName}>{community.name}</Text>
@@ -697,28 +710,34 @@ function CommunityListScreen({ navigation }) {
         </View>
       ))}
 
-      <TouchableOpacity style={styles.button} onPress={goToGameList}>
-        <Text style={styles.buttonText}>Start New Game</Text>
-      </TouchableOpacity>
+      {communities.length > 0 && (
+        <>
+          <TouchableOpacity style={styles.button} onPress={goToGameList}>
+            <Text style={styles.buttonText}>Start New Game</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('MyGames')}>
-        <Text style={styles.buttonText}>My Games</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('MyGames')}>
+            <Text style={styles.buttonText}>My Games</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.button, styles.secondaryButton]}
-        onPress={() => navigation.navigate('Consequences')}
-      >
-        <Text style={styles.buttonText}>My Consequences</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.secondaryButton]}
+            onPress={() => navigation.navigate('Consequences')}
+          >
+            <Text style={styles.buttonText}>My Consequences</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
-      <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToCreateCommunity}>
-        <Text style={styles.buttonText}>Create Community</Text>
-      </TouchableOpacity>
+      <View style={{ width: '100%', borderTopWidth: 1, borderTopColor: COLORS.border, marginVertical: 10, paddingTop: 15 }}>
+        <TouchableOpacity style={[styles.button, styles.accentButton]} onPress={goToCreateCommunity}>
+          <Text style={styles.buttonText}>Create Community</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToJoinCommunity}>
-        <Text style={styles.buttonText}>Join Community</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={[styles.button, styles.accentButton]} onPress={goToJoinCommunity}>
+          <Text style={styles.buttonText}>Join Community</Text>
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.buttonText}>Logout</Text>

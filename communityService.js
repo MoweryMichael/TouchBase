@@ -626,7 +626,7 @@ export const completeConsequence = async (consequenceId, proofText = null) => {
   if (!snap.exists()) throw new Error('Consequence not found');
 
   const c = snap.data();
-  if (c.playerId !== user.uid) throw new Error('You can only complete your own consequences');
+  if (c.targetId !== user.uid) throw new Error('Only the person owed can confirm a consequence is complete');
 
   await updateDoc(ref, {
     completed: true,

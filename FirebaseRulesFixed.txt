@@ -334,9 +334,9 @@ service cloud.firestore {
         && (request.resource.data.proofText == null || request.resource.data.proofText is string)
         && isTimestampOrServerTime(request.resource.data.createdAt);
 
-      // UPDATE: Only the playerId can mark their own consequence complete
+      // UPDATE: Only the targetId (person owed) can mark a consequence complete
       allow update: if isAuthenticated()
-        && uid() == resource.data.playerId
+        && uid() == resource.data.targetId
         && changedKeysOnly(['completed', 'completedAt', 'proofText'])
         && request.resource.data.completed is bool
         && (request.resource.data.completedAt == null || isTimestampOrServerTime(request.resource.data.completedAt))
