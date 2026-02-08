@@ -425,7 +425,7 @@ function GameScreen({ route, navigation }) {
     return () => unsub();
   }, [gameId]);
 
-  // Load members and auto-fill for mock players
+// Load members and auto-fill for mock players
   React.useEffect(() => {
     (async () => {
       try {
@@ -433,14 +433,13 @@ function GameScreen({ route, navigation }) {
           const { community } = await getCommunityMembers(game.communityId);
           const allMembers = Array.isArray(community?.members) ? [...community.members] : [];
           setMembers(allMembers);
-
-          // Auto-fill mock player moves for testing
-          if ((game?.player2Id?.startsWith?.('mock_user_')) || (game?.player1Id?.startsWith?.('mock_user_'))) {
+          // Auto-fill mock player moves for testing (dev only)
+          if (__DEV__ && ((game?.player2Id?.startsWith?.('mock_user_')) || (game?.player1Id?.startsWith?.('mock_user_')))) {
             await autoFillMockPlayer(gameId);
           }
         }
       } catch (e) {
-        console.log('load members error', e);
+        if (__DEV__) console.log('load members error', e);
       }
     })();
   }, [game?.communityId, gameId]);
