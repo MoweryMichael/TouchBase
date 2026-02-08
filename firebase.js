@@ -1,5 +1,4 @@
-// This is my firebase.js file which holds a lot of the apikeys and other access components necessary for interacting with the backend pieces like firebase and expo and google cloud.
-
+// Firebase initialization for Auth + Firestore
 import { initializeApp } from 'firebase/app';
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
