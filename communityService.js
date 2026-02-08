@@ -73,7 +73,7 @@ export const fetchUserDisplayName = async (userId) => {
       return name;
     }
   } catch (e) {
-    console.log('fetchUserDisplayName error:', e.message);
+    if (__DEV__) console.log('fetchUserDisplayName error:', e.message);
   }
   
   // Fallback to userId
@@ -124,7 +124,7 @@ export const fetchUserDisplayNames = async (userIds) => {
         }
       });
     } catch (e) {
-      console.log('fetchUserDisplayNames error:', e.message);
+      if (__DEV__) console.log('fetchUserDisplayNames error:', e.message);
       // Fallback: cache IDs for failed fetches
       chunk.forEach(id => {
         if (!displayNameCache.has(id)) {
