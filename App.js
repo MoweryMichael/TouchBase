@@ -104,6 +104,7 @@ const handleLogin = async () => {
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TextInput
@@ -112,6 +113,7 @@ const handleLogin = async () => {
         value={password}
         onChangeText={setPassword}
         secureTextEntry={true}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
@@ -170,6 +172,7 @@ const handleSignup = async () => {
         placeholder="Display Name"
         value={displayName}
         onChangeText={setDisplayName}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TextInput
@@ -179,6 +182,7 @@ const handleSignup = async () => {
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TextInput
@@ -187,6 +191,7 @@ const handleSignup = async () => {
         value={password}
         onChangeText={setPassword}
         secureTextEntry={true}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TextInput
@@ -195,6 +200,7 @@ const handleSignup = async () => {
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry={true}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TouchableOpacity style={styles.button} onPress={handleSignup}>
@@ -779,6 +785,7 @@ function CreateCommunityScreen({ navigation }) {
         value={name}
         onChangeText={setName}
         maxLength={50}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TextInput
@@ -789,6 +796,7 @@ function CreateCommunityScreen({ navigation }) {
         multiline={true}
         numberOfLines={3}
         maxLength={200}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TouchableOpacity style={styles.button} onPress={handleCreate}>
@@ -832,6 +840,7 @@ function JoinCommunityScreen({ navigation }) {
         onChangeText={setInviteCode}
         autoCapitalize="characters"
         maxLength={7}
+        placeholderTextColor={COLORS.textLight}
       />
 
       <TouchableOpacity style={styles.button} onPress={handleJoin}>
