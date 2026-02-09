@@ -11,14 +11,18 @@ import {
  StyleSheet, 
  Alert,
  ActivityIndicator,
- ScrollView
+ ScrollView,
+ KeyboardAvoidingView,
+ Platform,
+ Modal,
 } from 'react-native';
 import { 
  createUserWithEmailAndPassword, 
  signInWithEmailAndPassword,
  signOut,
  updateProfile,
- onAuthStateChanged
+ onAuthStateChanged,
+ sendPasswordResetEmail,
 } from 'firebase/auth';
 import { 
   createCommunity,
@@ -71,59 +75,86 @@ function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert('Error', 'Please enter both email and password');
-    return;
-  }
-  
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    // Ensure profile exists in Firestore (covers users who signed up before profile system)
-    if (userCredential.user.displayName) {
-      await saveUserProfile(userCredential.user.uid, userCredential.user.displayName);
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
     }
-  } catch (error) {
-    Alert.alert('Login Failed', error.message);
-  }
-};
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Ensure profile exists in Firestore (covers users who signed up before profile system)
+      if (userCredential.user.displayName) {
+        await saveUserProfile(userCredential.user.uid, userCredential.user.displayName);
+      }
+    } catch (error) {
+      Alert.alert('Login Failed', error.message);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Enter Email', 'Type your email address in the email field, then tap Forgot Password again.');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert('Check Your Email', 'A password reset link has been sent to ' + email + '. Check your spam folder if you don\'t see it.');
+    } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+        Alert.alert('Not Found', 'No account found with that email address.');
+      } else {
+        Alert.alert('Error', error.message);
+      }
+    }
+  };
 
   const goToSignup = () => {
     navigation.navigate('Signup');
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>TouchBase</Text>
-      <Text style={styles.subtitle}>Connect with your community</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>TouchBase</Text>
+        <Text style={styles.subtitle}>Connect with your community</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={COLORS.textLight}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry={true}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={COLORS.textLight}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={true}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Login</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.linkContainer} onPress={goToSignup}>
-        <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={handleForgotPassword}>
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.linkContainer} onPress={goToSignup}>
+          <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -134,83 +165,88 @@ function SignupScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
 
-const handleSignup = async () => {
-  if (!email || !password || !confirmPassword || !displayName) {
-    Alert.alert('Error', 'Please fill in all fields');
-    return;
-  }
-  
-  if (password !== confirmPassword) {
-    Alert.alert('Error', 'Passwords do not match');
-    return;
-  }
-  
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(userCredential.user, { displayName: displayName });
+  const handleSignup = async () => {
+    if (!email || !password || !confirmPassword || !displayName) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
     
-    // NEW: Save profile to Firestore so other users can see the display name
-    await saveUserProfile(userCredential.user.uid, displayName);
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
     
-    Alert.alert('Success', 'Account created! Welcome to TouchBase!');
-  } catch (error) {
-    Alert.alert('Signup Failed', error.message);
-  }
-};
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(userCredential.user, { displayName: displayName });
+      
+      // Save profile to Firestore so other users can see the display name
+      await saveUserProfile(userCredential.user.uid, displayName);
+      
+      Alert.alert('Success', 'Account created! Welcome to TouchBase!');
+    } catch (error) {
+      Alert.alert('Signup Failed', error.message);
+    }
+  };
 
   const goToLogin = () => {
     navigation.navigate('Login');
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Join TouchBase</Text>
-      <Text style={styles.subtitle}>Create your account</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Join TouchBase</Text>
+        <Text style={styles.subtitle}>Create your account</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Display Name"
-        value={displayName}
-        onChangeText={setDisplayName}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Display Name"
+          placeholderTextColor={COLORS.textLight}
+          value={displayName}
+          onChangeText={setDisplayName}
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={COLORS.textLight}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry={true}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={COLORS.textLight}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={true}
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry={true}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          placeholderTextColor={COLORS.textLight}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry={true}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleSignup}>
-        <Text style={styles.buttonText}>Create Account</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleSignup}>
+          <Text style={styles.buttonText}>Create Account</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.linkContainer} onPress={goToLogin}>
-        <Text style={styles.linkText}>Already have an account? Login</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity style={styles.linkContainer} onPress={goToLogin}>
+          <Text style={styles.linkText}>Already have an account? Login</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -270,7 +306,7 @@ function MyGamesScreen({ navigation }) {
     return () => { unsub1(); unsub2(); };
   }, []);
 
-  // ❗ Hooks must be called unconditionally (before any early returns)
+  // Hooks must be called unconditionally (before any early returns)
   const deduped = React.useMemo(() => {
     const map = new Map();
     for (const g of games) map.set(g.id, g);
@@ -280,7 +316,8 @@ function MyGamesScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text>Loading games…</Text>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 10, color: COLORS.textLight }}>Loading games…</Text>
       </View>
     );
   }
@@ -431,7 +468,7 @@ function GameScreen({ route, navigation }) {
     return () => unsub();
   }, [gameId]);
 
-// Load members and auto-fill for mock players
+  // Load members and auto-fill for mock players
   React.useEffect(() => {
     (async () => {
       try {
@@ -453,8 +490,8 @@ function GameScreen({ route, navigation }) {
   if (!game) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10 }}>Loading game…</Text>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 10, color: COLORS.textLight }}>Loading game…</Text>
       </View>
     );
   }
@@ -569,7 +606,7 @@ function GameScreen({ route, navigation }) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Waiting for Opponent</Text>
-        <ActivityIndicator size="large" color="#007AFF" style={{ marginVertical: 20 }} />
+        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 20 }} />
         <Text style={styles.subtitle}>Your moves are submitted. Waiting for opponent...</Text>
 
         <View style={styles.communityCard}>
@@ -633,6 +670,8 @@ function GameScreen({ route, navigation }) {
 // Community List Screen - shows user's communities
 function CommunityListScreen({ navigation }) {
   const [communities, setCommunities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -642,30 +681,32 @@ function CommunityListScreen({ navigation }) {
 
   const loadCommunities = async () => {
     try {
+      setLoading(true);
       const userCommunities = await getUserCommunities();
       setCommunities(userCommunities);
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to load communities');
+    } finally {
+      setLoading(false);
     }
   };
 
   React.useEffect(() => {
-  const loadAllMemberNames = async () => {
-    const allMemberIds = new Set();
-    communities.forEach(c => {
-      c.members?.forEach(m => allMemberIds.add(m));
-    });
+    const loadAllMemberNames = async () => {
+      const allMemberIds = new Set();
+      communities.forEach(c => {
+        c.members?.forEach(m => allMemberIds.add(m));
+      });
+      
+      if (allMemberIds.size > 0) {
+        await fetchUserDisplayNames(Array.from(allMemberIds));
+      }
+    };
     
-    if (allMemberIds.size > 0) {
-      await fetchUserDisplayNames(Array.from(allMemberIds));
+    if (communities.length > 0) {
+      loadAllMemberNames();
     }
-  };
-  
-  if (communities.length > 0) {
-    loadAllMemberNames();
-  }
-}, [communities]);
-
+  }, [communities]);
 
   const goToCreateCommunity = () => {
     navigation.navigate('CreateCommunity');
@@ -693,10 +734,58 @@ function CommunityListScreen({ navigation }) {
     );
   };
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 10, color: COLORS.textLight }}>Loading communities…</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
       <Text style={styles.title}>Your Communities</Text>
       <Text style={styles.subtitle}>Manage communities and start games</Text>
+
+      <TouchableOpacity
+        style={styles.howToPlayButton}
+        onPress={() => setShowHowToPlay(true)}
+      >
+        <Text style={styles.howToPlayButtonText}>How to Play</Text>
+      </TouchableOpacity>
+
+      {/* How to Play Modal */}
+      <Modal
+        visible={showHowToPlay}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowHowToPlay(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={[styles.communityName, { fontSize: 22, marginBottom: 16 }]}>How to Play TouchBase</Text>
+
+            <Text style={styles.howToPlayStep}>1. Join or create a community with your friends (at least 4 people).</Text>
+            <Text style={styles.howToPlayStep}>2. Start a game and pick an opponent from your community.</Text>
+            <Text style={styles.howToPlayStep}>3. Guess which community member most recently contacted your opponent (text, call, or DM — not group chats).</Text>
+            <Text style={styles.howToPlayStep}>4. Reveal who actually contacted you most recently.</Text>
+            <Text style={styles.howToPlayStep}>5. See the results:</Text>
+            <Text style={styles.howToPlayDetail}>  If you guessed right and they didn't — they owe you a consequence (call, meetup, etc).</Text>
+            <Text style={styles.howToPlayDetail}>  If they guessed right and you didn't — you owe them.</Text>
+            <Text style={styles.howToPlayDetail}>  Both right — you both do something positive together.</Text>
+            <Text style={styles.howToPlayDetail}>  Both wrong — you each reconnect with the person guessed for you.</Text>
+            <Text style={[styles.howToPlayStep, { marginTop: 12, fontStyle: 'italic' }]}>The goal: stay connected with your people. Every game ends with someone reaching out.</Text>
+
+            <TouchableOpacity
+              style={[styles.button, { marginTop: 20 }]}
+              onPress={() => setShowHowToPlay(false)}
+            >
+              <Text style={styles.buttonText}>Got It</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {communities.length === 0 && (
         <View style={[styles.communityCard, { alignItems: 'center', borderStyle: 'dashed' }]}>
@@ -775,34 +864,39 @@ function CreateCommunityScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Community</Text>
-      <Text style={styles.subtitle}>Start your TouchBase community</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Create Community</Text>
+        <Text style={styles.subtitle}>Start your TouchBase community</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Community Name (e.g., College Friends)"
-        value={name}
-        onChangeText={setName}
-        maxLength={50}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Community Name (e.g., College Friends)"
+          placeholderTextColor={COLORS.textLight}
+          value={name}
+          onChangeText={setName}
+          maxLength={50}
+        />
 
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="Description (optional)"
-        value={description}
-        onChangeText={setDescription}
-        multiline={true}
-        numberOfLines={3}
-        maxLength={200}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Description (optional)"
+          placeholderTextColor={COLORS.textLight}
+          value={description}
+          onChangeText={setDescription}
+          multiline={true}
+          numberOfLines={3}
+          maxLength={200}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleCreate}>
-        <Text style={styles.buttonText}>Create Community</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity style={styles.button} onPress={handleCreate}>
+          <Text style={styles.buttonText}>Create Community</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -829,24 +923,29 @@ function JoinCommunityScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Join Community</Text>
-      <Text style={styles.subtitle}>Enter an invite code to join</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Join Community</Text>
+        <Text style={styles.subtitle}>Enter an invite code to join</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Invite Code (e.g., SEDKFXI)"
-        value={inviteCode}
-        onChangeText={setInviteCode}
-        autoCapitalize="characters"
-        maxLength={7}
-        placeholderTextColor={COLORS.textLight}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Invite Code (e.g., SEDKFXI)"
+          placeholderTextColor={COLORS.textLight}
+          value={inviteCode}
+          onChangeText={setInviteCode}
+          autoCapitalize="characters"
+          maxLength={7}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleJoin}>
-        <Text style={styles.buttonText}>Join Community</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity style={styles.button} onPress={handleJoin}>
+          <Text style={styles.buttonText}>Join Community</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -892,7 +991,7 @@ function GameListScreen({ navigation }) {
     );
   };
   
-    const handleCreateGame = async (communityId, opponentId) => {
+  const handleCreateGame = async (communityId, opponentId) => {
     try {
       const game = await createGame(communityId, opponentId);
       Alert.alert('Game Created!', 'Ready to start guessing', [
@@ -963,9 +1062,9 @@ function AuthGate({ children, onAuthed, onAnon }) {
 
   if (initializing) {
     return (
-      <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
-        <ActivityIndicator />
-        <Text style={{ marginTop: 8 }}>Loading…</Text>
+      <View style={{ flex:1, alignItems:'center', justifyContent:'center', backgroundColor: COLORS.background }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 8, color: COLORS.textLight }}>Loading…</Text>
       </View>
     );
   }
@@ -1020,7 +1119,7 @@ export default function App() {
   );
 }
 
-// Styles (same as before, plus some new ones)
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1086,6 +1185,11 @@ const styles = StyleSheet.create({
   linkText: {
     color: COLORS.primary,
     fontSize: 16,
+  },
+  forgotPasswordText: {
+    color: COLORS.textLight,
+    fontSize: 14,
+    marginBottom: 10,
   },
   logoutButton: {
     width: '100%',
@@ -1158,5 +1262,45 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
     paddingTop: 12,
+  },
+  howToPlayButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    marginBottom: 20,
+  },
+  howToPlayButtonText: {
+    color: COLORS.primary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxHeight: '80%',
+  },
+  howToPlayStep: {
+    fontSize: 15,
+    color: COLORS.text,
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  howToPlayDetail: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    marginBottom: 4,
+    marginLeft: 8,
+    lineHeight: 20,
   },
 });
